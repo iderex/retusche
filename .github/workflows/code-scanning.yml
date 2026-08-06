@@ -111,60 +111,8 @@ jobs:
         # them. Without this step the check is green on a tree full of
         # findings, which is the difference between a gate and a dashboard.
         #
-        # Every branch below that cannot judge fails rather than passes: no
-        # SARIF, a SARIF that does not parse, a SARIF holding no run, or a
-        # result whose rule metadata is missing so its tags cannot be read.
-        run: |
-          set -euo pipefail
-
-          sarif=sarif-results/python.sarif
-          if [ ! -f "${sarif}" ]; then
-            echo "::error::No SARIF at ${sarif}, so this run judged nothing. Failing closed rather than reporting a tree nobody analysed as clean."
-            exit 1
-          fi
-
-          if ! jq -e . "${sarif}" > /dev/null; then
-            echo "::error::${sarif} does not parse as JSON. Failing closed."
-            exit 1
-          fi
-
-          runs=$(jq '.runs | length' "${sarif}")
-          if [ "${runs}" -lt 1 ]; then
-            echo "::error::${sarif} holds no analysis run. Failing closed."
-            exit 1
-          fi
-
-          # One line per result: class, rule, severity, location, message. The
-          # rule metadata lives beside the results rather than inside them, in
-          # tool.driver.rules and, for a query pack, in tool.extensions.
-          jq -r '
-            .runs[] as $run
-            | (($run.tool.driver.rules // [])
-               + ([$run.tool.extensions[]?.rules // []] | add // [])) as $rules
-            | $run.results[]?
-            | . as $result
-            | ((first($rules[] | select(.id == $result.ruleId))) // null) as $rule
-            | (if $rule == null then "unresolved"
-               elif (($rule.properties.tags // []) | index("security")) then "security"
-               else "other" end) as $class
-            | [
-                $class,
-                ($result.ruleId // "?"),
-                ($rule.properties["security-severity"] // "-"),
-                "\($result.locations[0].physicalLocation.artifactLocation.uri // "?"):\($result.locations[0].physicalLocation.region.startLine // 0)",
-                (($result.message.text // "") | gsub("[\n\r\t]"; " "))
-              ]
-            | @tsv
-          ' "${sarif}" > classified.tsv
-
-          total=$(wc -l < classified.tsv)
-          actionable=$(grep -cE '^(security|unresolved)\b' classified.tsv || true)
-          echo "CodeQL results in this tree: ${total}. Actionable: ${actionable}."
-
-          if [ "${actionable}" -gt 0 ]; then
-            echo "::error::Code scanning refused this tree. Each line below is class, rule, security-severity, location, message."
-            grep -E '^(security|unresolved)\b' classified.tsv
-            exit 1
-          fi
-
-          echo "No security-tagged result. What this does not mean is in docs/code-scanning.md."
+        # The judgement is a module rather than a shell pipeline here because it
+        # is the part that has to be right, and a module runs against a fixture
+        # on a workstation exactly as it runs on this runner. Its docstring says
+        # what it treats as actionable and which failures it fails closed on.
+        run: python3 .github/scripts/code_scanning_gate.py sarif-results/python.sarif

@@ -42,6 +42,26 @@ harmless, and a gate that cannot judge fails rather than passes. The same holds
 for a missing SARIF, one that does not parse, and one that carries no analysis
 run.
 
+## Where the verdict is made
+
+`.github/scripts/code_scanning_gate.py`, called by the last step of the
+workflow with the path to the SARIF the analysis wrote. It exits zero when
+nothing is actionable and non-zero otherwise, and it prints one line per
+actionable result: class, rule, security severity, location, message.
+
+It is a module rather than a shell pipeline because it is the part that has to
+be right, and because it takes a file and prints a verdict, so it runs against
+a fixture on a workstation exactly as it runs on a runner. That is the only way
+the refusing path of this gate can be watched without waiting for a real
+finding to appear in real code.
+
+Two limits of that arrangement, both worth stating rather than discovering.
+mypy's scope is `src`, declared in `pyproject.toml`, so this module is linted
+and formatted by the same gate as everything else and is not type-checked by
+it. And the fixtures it has been run against are fixtures: they prove what the
+module does with a SARIF, and they say nothing about whether CodeQL writes the
+SARIF anyone expects.
+
 ## Where a finding is read
 
 The job uploads its SARIF to code scanning under the category

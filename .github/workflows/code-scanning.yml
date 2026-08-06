@@ -1,0 +1,170 @@
+# Semantic analysis of this project's own Python (CodeQL). The gates in
+# pull-request.yml judge whether the code is well typed and well formed; this
+# one judges what the code does with data it did not create. Those are
+# different questions, and the linter cannot answer the second: ruff's bandit
+# family matches a call by name, so it sees `eval` and never sees a path built
+# from a value that arrived from outside. This service is going to decode image
+# files from strangers and hold a token for somebody's photo library, so the
+# second question is the one that matters here.
+#
+# The workflow audit in zizmor.yml judges the workflow files. This job does not
+# analyse them, so `actions` is deliberately absent from the language list
+# below and the two do not overlap.
+#
+# What counts as actionable: any result whose CodeQL rule carries the
+# `security` tag, at any severity. The tree has none today, so the gate holds
+# it at zero rather than at a threshold nobody chose. docs/code-scanning.md
+# argues that choice, says what would retire it, and states what the gate
+# cannot see.
+name: Code scanning
+
+on:
+  # The default branch and every base branch, so a future release branch is
+  # analysed too.
+  push:
+    branches: [main]
+  pull_request:
+    branches: ["**"]
+
+# Deny by default at workflow level; the job grants only what it needs.
+permissions: {}
+
+# A newer push to the same ref supersedes an in-flight analysis. This job reads
+# the tree and publishes findings about that tree, so a superseded run has
+# nothing to say that the newer one does not.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  code-scanning:
+    name: Code scanning (CodeQL)
+    runs-on: ubuntu-latest
+    # CodeQL downloads its own bundle and database before it analyses anything,
+    # so this is slower than the gates that only need uv.
+    timeout-minutes: 20
+    permissions:
+      security-events: write # upload the SARIF into the code-scanning tab
+      contents: read # checkout the source to analyse
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # No step pushes, so do not persist the token.
+          persist-credentials: false
+
+      - name: Initialise CodeQL
+        uses: github/codeql-action/init@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        with:
+          languages: python
+          # Python is not compiled and this project builds nothing to analyse.
+          build-mode: none
+          # The configuration is written here rather than in a separate file so
+          # that the query set and the gate that reads its output cannot drift
+          # apart in two places.
+          #
+          # security-extended over the default suite: it adds the lower
+          # precision security queries, which is the right trade while the tree
+          # is small enough that a false positive costs one dismissal rather
+          # than a day.
+          #
+          # The local threat model is included because this project has no
+          # remote entry point yet. Under the default model the sources are
+          # request objects from a web framework, and there is no web framework
+          # here, so almost every taint query would have nothing to start from
+          # and the analysis would be green because it could not see rather
+          # than because there was nothing to see. Command line arguments,
+          # environment variables and standard input are what the code reads
+          # today, and the worker will read them from a supervisor.
+          config: |
+            queries:
+              - uses: security-extended
+            threat-models:
+              - local
+
+      - name: Analyse
+        uses: github/codeql-action/analyze@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        with:
+          category: /language:python
+          # Write the SARIF where the gate step below can read it. The upload is
+          # a separate step for the same reason zizmor.yml separates it: a
+          # pull request from a fork runs with a read-only token and cannot
+          # write security events, and the gate has to fail there as well.
+          output: sarif-results
+          upload: false
+
+      - name: Upload SARIF
+        # Only where the token can write security events: pushes to the default
+        # branch and same-repository pull requests that are not from
+        # Dependabot. continue-on-error keeps the gate independent of the
+        # upload, so a transient code-scanning outage cannot skip the step that
+        # actually refuses.
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]')
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@e4fba868fa4b1b91e1fdab776edc8cfbe6e9fb81 # v4.37.3
+        with:
+          sarif_file: sarif-results
+          category: /language:python
+
+      - name: Fail on an actionable finding
+        # The CodeQL action does not fail a run on its findings; it reports
+        # them. Without this step the check is green on a tree full of
+        # findings, which is the difference between a gate and a dashboard.
+        #
+        # Every branch below that cannot judge fails rather than passes: no
+        # SARIF, a SARIF that does not parse, a SARIF holding no run, or a
+        # result whose rule metadata is missing so its tags cannot be read.
+        run: |
+          set -euo pipefail
+
+          sarif=sarif-results/python.sarif
+          if [ ! -f "${sarif}" ]; then
+            echo "::error::No SARIF at ${sarif}, so this run judged nothing. Failing closed rather than reporting a tree nobody analysed as clean."
+            exit 1
+          fi
+
+          if ! jq -e . "${sarif}" > /dev/null; then
+            echo "::error::${sarif} does not parse as JSON. Failing closed."
+            exit 1
+          fi
+
+          runs=$(jq '.runs | length' "${sarif}")
+          if [ "${runs}" -lt 1 ]; then
+            echo "::error::${sarif} holds no analysis run. Failing closed."
+            exit 1
+          fi
+
+          # One line per result: class, rule, severity, location, message. The
+          # rule metadata lives beside the results rather than inside them, in
+          # tool.driver.rules and, for a query pack, in tool.extensions.
+          jq -r '
+            .runs[] as $run
+            | (($run.tool.driver.rules // [])
+               + ([$run.tool.extensions[]?.rules // []] | add // [])) as $rules
+            | $run.results[]?
+            | . as $result
+            | ((first($rules[] | select(.id == $result.ruleId))) // null) as $rule
+            | (if $rule == null then "unresolved"
+               elif (($rule.properties.tags // []) | index("security")) then "security"
+               else "other" end) as $class
+            | [
+                $class,
+                ($result.ruleId // "?"),
+                ($rule.properties["security-severity"] // "-"),
+                "\($result.locations[0].physicalLocation.artifactLocation.uri // "?"):\($result.locations[0].physicalLocation.region.startLine // 0)",
+                (($result.message.text // "") | gsub("[\n\r\t]"; " "))
+              ]
+            | @tsv
+          ' "${sarif}" > classified.tsv
+
+          total=$(wc -l < classified.tsv)
+          actionable=$(grep -cE '^(security|unresolved)\b' classified.tsv || true)
+          echo "CodeQL results in this tree: ${total}. Actionable: ${actionable}."
+
+          if [ "${actionable}" -gt 0 ]; then
+            echo "::error::Code scanning refused this tree. Each line below is class, rule, security-severity, location, message."
+            grep -E '^(security|unresolved)\b' classified.tsv
+            exit 1
+          fi
+
+          echo "No security-tagged result. What this does not mean is in docs/code-scanning.md."

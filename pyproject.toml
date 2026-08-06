@@ -24,6 +24,11 @@ orchestrator = []
 # declared. It arrives with the first engine.
 worker = []
 
+[dependency-groups]
+# Tooling the gates run. Pinned exactly: a type checker that moves under a
+# range decides different things about unchanged code on different days.
+dev = ["mypy==2.3.0"]
+
 [project.urls]
 Homepage = "https://github.com/iderex/retusche"
 Issues = "https://github.com/iderex/retusche/issues"
@@ -38,3 +43,42 @@ packages = [
     "src/retusche_contracts",
     "src/retusche_worker",
 ]
+
+[tool.mypy]
+# Strict from the first module. Turning it on later costs one repair per module
+# written under the looser setting, and the count only grows.
+strict = true
+python_version = "3.14"
+files = ["src"]
+
+# The escape hatches, all held shut. ignore_missing_imports is the one that
+# matters: switched on globally it silences every untyped third-party package at
+# once, including the next one somebody adds, and nothing says which. The block
+# at the bottom of this file is where a named library is declared instead.
+ignore_missing_imports = false
+follow_imports = "normal"
+warn_unused_configs = true
+warn_unused_ignores = true
+disallow_any_unimported = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+no_implicit_reexport = true
+
+# ignore-without-code refuses a bare `# type: ignore`, so a suppression must
+# name the error it suppresses and cannot quietly cover a second fault that
+# appears on that line later.
+enable_error_code = [
+    "ignore-without-code",
+    "redundant-expr",
+    "truthy-bool",
+    "possibly-undefined",
+]
+
+# Third-party libraries that ship no type information are declared here, in one
+# place, and never with a per-import-site silence. There are none yet: this
+# project declares no runtime dependencies. Each entry added below carries the
+# library, the reason it has no stubs, and what would retire the entry.
+#
+# [[tool.mypy.overrides]]
+# module = ["example_untyped_library.*"]
+# ignore_missing_imports = true

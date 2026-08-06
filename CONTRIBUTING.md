@@ -30,6 +30,7 @@ In the order they should be run.
 | Formatting is already what it would be | `uv run ruff format --check` |
 | Lint | `uv run ruff check` |
 | Type check, strict | `uv run mypy` |
+| Tests, with the coverage floor | `uv run pytest` |
 | No carriage return in tracked text | `git grep -nIP '\r' HEAD -- .` |
 
 `uv lock --check` names the repair rather than performing it: it prints
@@ -38,11 +39,6 @@ In the order they should be run.
 The line-ending scan prints the offending file and line, and prints nothing on
 a clean tree. It reads blobs at `HEAD`, not files on disk, which is why it is
 the same command everywhere; the section below says what that buys.
-
-One gate is missing from that table and its absence is not an oversight. There
-is no test command and no coverage floor, which is issue #5. Until it lands,
-running everything in this table is not the same as running everything a change
-has to pass, and this file will say so until the row exists.
 
 `uv run ruff format` is the repair and `--check` is the verdict, and they are
 the same binary resolved from the same lock file, so the gate and the repair
@@ -54,6 +50,64 @@ The formatter reaches python inside markdown as well as python in a `.py` file,
 so a fenced code block in a document is formatted like the code it shows. An
 indented block is not, because it is not fenced and nothing declares its
 language.
+
+## The suite and the coverage floor
+
+One command, and it carries no options:
+
+    uv run pytest
+
+The test paths, the coverage scope and the floor are all in `pyproject.toml`, so
+this command on a laptop judges the tree exactly as the `test` job does. A
+`--cov` flag on a command line would be a measurement that exists only where that
+line is typed.
+
+The floor is 100, and this is the run it comes from, on Windows, which is why
+the paths read with backslashes:
+
+    $ uv run pytest
+    ...
+    Name                                 Stmts   Miss Branch BrPart  Cover   Missing
+    --------------------------------------------------------------------------------
+    src\retusche\__init__.py                 2      0      0      0   100%
+    src\retusche_contracts\__init__.py       2      0      0      0   100%
+    src\retusche_contracts\engine.py        77      0      0      0   100%
+    --------------------------------------------------------------------------------
+    TOTAL                                   81      0      0      0   100%
+    Required test coverage of 100.0% reached. Total coverage: 100.00%
+    26 passed
+
+That is the floor because it is the measurement. A floor set below what the tree
+already reaches is room a change can walk into while the gate stays green, which
+is the thing the floor exists to refuse. It is a number about two packages that
+today hold declarations and no behaviour, so it says less than it will once there
+is behaviour to miss; what it does say is that nothing arrives uncovered from
+here on. Lowering it is a change with a reason in its pull-request body, not a
+number edited on the way past.
+
+Coverage is measured over the orchestration packages. The worker is not measured,
+and the run prints that along with the reason rather than leaving it out, because
+a report that quietly omits a package reads the same as one where the package was
+measured and found complete. Both lists live in `pyproject.toml`, and the suite
+refuses to start if a package under `src/` is in neither: a package cannot arrive
+without somebody deciding which side of the line it is on.
+
+Two rules bind the suite itself.
+
+Every test runs with no display, no elevation and no GPU. The `test` job prints
+what the runner actually had before it runs anything, so that is a fact from the
+run rather than a claim made here. Nothing yet refuses a test that quietly needs
+one of the three; that is issue #84.
+
+A test may not import a machine-learning runtime while its module executes. Such
+a test wants weights, a device and a driver, and it belongs in the hardware
+harness where it is skipped by name. The rule is applied at discovery, before the
+file is imported, so what you get is a message naming the file, the line and the
+module rather than an import error from somewhere inside the interpreter. The
+refused module roots are `[tool.retusche.import-boundary]` in `pyproject.toml`,
+and a class body or an `if TYPE_CHECKING:` block counts as module level, because
+those are where such an import gets written when somebody wants it to look
+conditional.
 
 ## Line endings and exact bytes
 
@@ -104,15 +158,16 @@ thing it describes. The checks a change actually has to pass are printed by:
 
     gh pr checks <number>
 
-Three of them have a local equivalent today, and the name is written here beside
+Four of them have a local equivalent today, and the name is written here beside
 the command because a name you cannot reproduce locally is a name you can only
 argue with after a red run.
 
 `type-check` is reproduced by `uv run mypy` plus the two suppression scans in
 `.github/workflows/pull-request.yml`. `lint` is reproduced by
 `uv run ruff format --check` followed by `uv run ruff check`, in that order,
-which is the order the job runs them. `line-endings` is reproduced by the scan
-in the table above together with
+which is the order the job runs them. `test` is reproduced by `uv run pytest`
+exactly, options included, which is why the job passes none. `line-endings` is
+reproduced by the scan in the table above together with
 
     git ls-files --eol | grep -E '^i/(crlf|mixed)'
 

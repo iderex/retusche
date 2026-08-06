@@ -92,38 +92,61 @@ and it is worth measuring before either of those two is required.
 
 ## What has been observed
 
-Every workflow run this repository has recorded, not a sample:
+Every failing run this repository has recorded, not a sample. The list grows,
+so the command is the authority and what follows is what it printed at the
+commit that added this paragraph:
 
-    gh api --paginate "repos/iderex/retusche/actions/runs?per_page=100" --jq '.workflow_runs[].conclusion' | sort | uniq -c
-          4 failure
-        116 success
+    gh api --paginate "repos/iderex/retusche/actions/runs?per_page=100" --jq '.workflow_runs[] | select(.conclusion=="failure") | "\(.name)\t\(.id)\t\(.event)"'
+    unicode-guard	31111491469	pull_request
+    Workflow Security Analysis	31111490977	pull_request
+    Pull request checks	31111490893	pull_request
+    unicode-guard	31111477192	push
+    Pull request checks	31097485489	pull_request
+    Pull request checks	31097265500	pull_request
+    line-endings	31095816028	push
+    line-endings	31095690232	push
 
-    gh api --paginate "repos/iderex/retusche/actions/runs?per_page=100" --jq '.workflow_runs[] | select(.conclusion=="failure") | "\(.name)\t\(.id)\t\(.head_sha)"'
-    Pull request checks	31097485489	37cbf0e3f53266507aeda7e0b84be3f8218a8724
-    Pull request checks	31097265500	670f5f992510941e6615e891e3e1f55d0318564c
-    line-endings	31095816028	911a8b4de4541885728c96b4f186daca111f5822
-    line-endings	31095690232	0dac0b2362b2688561f97b5af08a73258f31929e
-
-A workflow run is not a check name, so the two pull-request failures are read at
-the job level:
+A workflow run is not a check name, so a run that holds more than one job is
+read at the job level:
 
     gh api "repos/iderex/retusche/actions/runs/31097265500/jobs" --jq '.jobs[] | "\(.name)\t\(.conclusion)"'
     lint	failure
     type-check	success
 
-    gh api "repos/iderex/retusche/actions/runs/31097485489/jobs" --jq '.jobs[] | "\(.name)\t\(.conclusion)"'
-    type-check	success
-    lint	failure
+    gh api "repos/iderex/retusche/actions/runs/31111490893/jobs" --jq '.jobs[] | "\(.name)\t\(.conclusion)"'
+    type-check	failure
+    lint	success
 
-Two published names have been watched refusing something: `lint` and
-`line-endings`. Both refused a near miss written to make them refuse, and both
-went green again when it was removed. Every other name in this repository has
-only ever been seen passing.
+Five published names have been watched refusing something: `lint`,
+`line-endings`, `type-check`, `Reject Trojan Source Unicode` and
+`Audit workflows (zizmor)`. Each refused a near miss written to make it refuse,
+each went green again when the fixture came out, and each entry below cites the
+run. The remaining names have only ever been seen passing.
 
-That is the reason each entry below carries its observation. A check that has
-never failed is one whose failure path has not run, and requiring it makes a
-merge depend on behaviour nobody has seen. It is not an argument against
-requiring these checks. It is the thing to fix before the act is taken, and each
+Every one of those near misses was refused by its own gate and by no other. On
+the head that carried all three of the most recent ones, the checks that had
+nothing to do with them stayed green:
+
+    gh api "repos/iderex/retusche/commits/f5a0b07c3e9646e41157dbb5bebcb9318a64d0e6/check-runs?per_page=100" --jq '.check_runs[] | "\(.name)\t\(.conclusion)"' | sort
+    Audit workflows (zizmor)	failure
+    DCO sign-off	success
+    dependency-review	success
+    line-endings	success
+    line-endings	success
+    lint	success
+    Reject Trojan Source Unicode	failure
+    Reject Trojan Source Unicode	failure
+    type-check	failure
+    zizmor	success
+
+That matters more than the count of red runs. A fixture that reddens three gates
+at once proves that something is wrong, not that each gate refuses the thing it
+names.
+
+The reason each entry carries its observation at all: a check that has never
+failed is one whose failure path has not run, and requiring it makes a merge
+depend on behaviour nobody has seen. That is not an argument against requiring
+the remaining ones. It is the thing to do before the act is taken, and each
 entry says what would produce the missing observation.
 
 ## Proposed required set
@@ -149,9 +172,9 @@ above.
 `type-check`, the job id in `.github/workflows/pull-request.yml`. Strict
 typing is the only thing standing behind the contract package's declarations
 while there is no suite, and a break there reaches every layer that imports it.
-Green observed on the same head. Red not observed. What would produce it: a
-tracked module carrying an annotation that strict mypy refuses, landed as a near
-miss and removed once the run is recorded.
+Green observed on the same head. Red observed at run `31111490893`, job
+`type-check`, on a module whose annotation said it returned text and whose body
+returned the number it was given. The fixture was removed once the run existed.
 
 `DCO sign-off`, declared in `.github/workflows/dco.yml`. This is the term on
 which a change from outside is accepted. A term that does not block a merge is
@@ -163,15 +186,18 @@ rewriting the branch, which is why no run has produced one so far.
 `Reject Trojan Source Unicode`, declared in
 `.github/workflows/unicode-guard.yml`. Bidirectional control characters make a
 diff read differently from what it does, which is the one defect class a reviewer
-cannot catch by reading more carefully. Green observed on the same head. Red not
-observed. What would produce it: a tracked file carrying a bidi override,
-landed as a near miss and removed. Published twice per head, as above.
+cannot catch by reading more carefully. Green observed on the same head. Red
+observed twice on one head, runs `31111491469` and `31111477192`, on a tracked
+file carrying a right-to-left override in the middle of a sentence. The fixture
+was removed once the runs existed. Published twice per head, as above, and both
+copies refused it.
 
 `Audit workflows (zizmor)`, declared in `.github/workflows/zizmor.yml`. The
 workflows hold the only credentials this repository has, and this is the job that
-judges them. Green observed on the same head. Red not observed. What would
-produce it: a step referring to an action by tag instead of by commit, which the
-audit refuses at the severity the job already runs at.
+judges them. Green observed on the same head. Red observed at run `31111490977`,
+on a job declaring no permissions block and checking out with the token left in
+`.git/config`, which is what copying a job out of a tutorial produces. The
+fixture was removed once the run existed.
 
 `dependency-review`, the job id in
 `.github/workflows/dependency-review.yml`. It answers only on a pull request,
@@ -190,7 +216,11 @@ runs, and `.github/workflows/zizmor.yml` skips that upload where the token canno
 write security events. A required check that is not published at all on those
 pull requests is a merge that cannot complete, and the refusal it carries is
 already carried by the job name above, which runs in every case. Green observed
-on the same head. Red not observed.
+on the same head. Red not observed, and the head that reddened the audit is the
+evidence for keeping it advisory: `Audit workflows (zizmor)` refused the near
+miss on `f5a0b07c3e9646e41157dbb5bebcb9318a64d0e6` and `zizmor` reported success
+on the same commit, in the listing above. Requiring this name would have let
+that change through.
 
 `Scorecard analysis`, declared in `.github/workflows/scorecard.yml`. It is
 triggered by `branch_protection_rule`, by a schedule and by a push to the default

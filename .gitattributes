@@ -65,6 +65,3 @@ LICENSE         text
 *.npz           binary
 *.bin           binary
 *.gguf          binary
-
-# Fixture for the near-miss proof, removed in the commit after it.
-fixture-declared-binary.txt binary

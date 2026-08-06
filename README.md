@@ -18,7 +18,8 @@ This repository starts with planning. The plan lives on the issue tracker;
 every architectural decision is written down there with its reasons before
 the code that depends on it exists.
 
-See [NOTICE.md](NOTICE.md) for the intended-use notice.
+See [NOTICE.md](NOTICE.md) for the intended-use notice: the uses this project
+does not support, and what it does not build.
 
 See [LICENSE](LICENSE) for the terms, the GNU Affero General Public
 License version 3.

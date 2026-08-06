@@ -25,9 +25,10 @@ orchestrator = []
 worker = []
 
 [dependency-groups]
-# Tooling the gates run. Pinned exactly: a type checker that moves under a
-# range decides different things about unchanged code on different days.
-dev = ["mypy==2.3.0"]
+# Tooling the gates run. Pinned exactly: a checker that moves under a range
+# decides different things about unchanged code on different days, and a
+# formatter that moves under one rewrites files nobody touched.
+dev = ["mypy==2.3.0", "ruff==0.16.1"]
 
 [project.urls]
 Homepage = "https://github.com/iderex/retusche"
@@ -43,6 +44,72 @@ packages = [
     "src/retusche_contracts",
     "src/retusche_worker",
 ]
+
+[tool.ruff]
+# The rule set lives here and never on a command line. A flag passed in a
+# workflow is a rule that only exists where that workflow runs, so a local run
+# and a gate run judge the same file differently and the difference is
+# invisible until one of them is red.
+#
+# No `target-version`. Ruff reads `requires-python` above, so the syntax it
+# assumes cannot drift away from the interpreter this project is pinned to.
+line-length = 88
+
+[tool.ruff.lint]
+# Selected for what each family refuses, not for coverage. mypy already holds
+# the type surface, so nothing here is chosen to duplicate it.
+select = [
+    "F",     # pyflakes: undefined name, unused import, the errors that are errors
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings, which this gate treats as failures like the rest
+    "I",     # import sorting, so an import block is never a review topic
+    "N",     # pep8-naming
+    "UP",    # pyupgrade: syntax kept at the pinned interpreter rather than below it
+    "B",     # bugbear: the mutable-default and loop-variable-capture family
+    "C4",    # comprehension rewrites
+    "SIM",   # simplifications a reader would have asked for anyway
+    "RET",   # return-path shapes
+    "PIE",   # small dead constructs
+    "PTH",   # pathlib over os.path, one way to say a path
+    "S",     # bandit: this is a network-facing service that reads other people's files
+    "ASYNC", # blocking calls inside async, which an HTTP surface will have
+    "DTZ",   # naive datetimes, in a project that will state retention periods
+    "LOG",   # logging call shapes
+    "G",     # logging format strings, so a message is not built before it is needed
+    "T20",   # print, which is not how a service says anything
+    "TID",   # tidy imports: relative-import discipline across the package boundary
+    "RUF",   # ruff's own rules
+]
+
+# What is deliberately not selected, so the absence reads as a decision.
+#
+# ANN and D are not here. mypy runs strict, which already refuses a function
+# without annotations, and a second mechanism for one property means two places
+# to change and two verdicts to reconcile. Docstring style is a judgement this
+# project has not made yet; making it here would enforce a convention nobody
+# wrote down.
+#
+# COM and ISC are not here because the formatter owns that ground. A linter and
+# a formatter arguing over commas and implicit concatenation produce a file that
+# each of them wants to change back.
+
+[tool.ruff.lint.per-file-ignores]
+# A test asserts. S101 refuses `assert` because it vanishes under `python -O`,
+# which is true of shipped code and beside the point in a suite. The directory
+# arrives with #5.
+"tests/**" = ["S101"]
+
+# N818 wants every exception class to end in `Error`. The engine contract names
+# its base `EngineError` and its subclasses for the condition instead, so a
+# caller writes `except Cancelled:` and reads a sentence. Whether that is the
+# right convention belongs to #14, which declared the interface, and a gate
+# landing afterwards is not where an interface gets renamed. Narrowed to the one
+# module that holds those classes, so a badly named exception anywhere else is
+# still refused.
+"src/retusche_contracts/engine.py" = ["N818"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["retusche", "retusche_contracts", "retusche_worker"]
 
 [tool.mypy]
 # Strict from the first module. Turning it on later costs one repair per module

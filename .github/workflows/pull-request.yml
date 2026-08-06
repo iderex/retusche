@@ -1,8 +1,9 @@
-# Gates that run against the project's own code, as opposed to the five guards
-# that judge supply chain and workflow hygiene. It holds the type gate today;
-# the lint and test gates join it under #6, which owns the published names.
+# Gates that run against the project's own code, as opposed to the guards that
+# judge supply chain and workflow hygiene. It holds the type gate and the
+# format-and-lint gate; the test gate joins it under #5, and which of these names
+# has to stand in front of the default branch is #6.
 #
-# No `name:` on the job below: the ruleset that guards the default branch
+# No `name:` on the jobs below: the ruleset that guards the default branch
 # matches a required status check by its literal check-run name, which defaults
 # to the job id when no `name:` is set. Overriding it here would rename the
 # check run and silently remove whatever gate was matching the old name. This is
@@ -91,3 +92,42 @@ jobs:
             exit 1
           fi
           echo "Type suppressions in tracked Python files: ${count}"
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read # checkout only
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # No step pushes, so do not persist the token.
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+
+      - name: Create the environment from the lock file
+        # Same reason as the type gate: --locked stops here if pyproject.toml and
+        # uv.lock disagree, rather than judging the tree with a formatter version
+        # no other machine would resolve to.
+        run: uv sync --locked
+
+      - name: Check the formatting
+        # --check writes nothing and exits non-zero on a file that would change,
+        # naming it. `uv run ruff format` without the flag is the repair, and it
+        # is the same binary from the same lock file, so the gate and the repair
+        # cannot disagree about what formatted means.
+        run: uv run ruff format --check
+
+      - name: Lint
+        # No rules on this command line. The set is in pyproject.toml, so a local
+        # run judges the same file the same way; a flag here would be a rule that
+        # exists only inside this workflow.
+        #
+        # --no-fix because a gate reports, it does not edit. --output-format=github
+        # puts each finding on its line in the diff, and every finding is a
+        # failure: ruff has no severity below error, so there is no warning here
+        # that could be passed over.
+        run: uv run ruff check --no-fix --output-format=github

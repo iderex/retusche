@@ -1,0 +1,93 @@
+# Gates that run against the project's own code, as opposed to the five guards
+# that judge supply chain and workflow hygiene. It holds the type gate today;
+# the lint and test gates join it under #6, which owns the published names.
+#
+# No `name:` on the job below: the ruleset that guards the default branch
+# matches a required status check by its literal check-run name, which defaults
+# to the job id when no `name:` is set. Overriding it here would rename the
+# check run and silently remove whatever gate was matching the old name. This is
+# the same reason dependency-review.yml gives for leaving its job unnamed.
+name: Pull request checks
+
+on:
+  # Every base branch, not only main, so a future release branch is gated too.
+  pull_request:
+    branches: ["**"]
+
+# Deny by default at workflow level; the job grants only what it needs.
+permissions: {}
+
+# A newer push to the same pull request supersedes an in-flight run. These gates
+# read the tree and publish nothing, so cancelling a superseded run is safe.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  type-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read # checkout only
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history so the suppression scan below can walk the tracked tree
+          # with git grep; no step pushes, so do not persist the token.
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+
+      - name: Create the environment from the lock file
+        # --locked refuses to resolve: if pyproject.toml and uv.lock disagree the
+        # job stops here rather than type-checking against a set of versions no
+        # other machine would get.
+        run: uv sync --locked
+
+      - name: Type check
+        run: uv run mypy
+
+      - name: Refuse a suppression that carries no reason
+        # A `# type: ignore[code]` with nothing after it says what is switched off
+        # and never why, so the next reader cannot tell a considered suppression
+        # from one somebody added to get a red build green. mypy's
+        # ignore-without-code refuses the bare form; nothing in mypy refuses the
+        # coded form with no trailing comment, which is what this step is for.
+        #
+        # git grep: 0 = an offender was found, 1 = clean, >=2 = scanner error.
+        # Fail closed on the error case rather than reading a broken scan as a
+        # clean tree.
+        run: |
+          set -euo pipefail
+          rc=0
+          git grep -nE '# type: ignore(\[[^]]*\])?[[:space:]]*$' -- '*.py' || rc=$?
+          case "$rc" in
+            0)
+              echo "::error::A type suppression above carries no reason. Write it on the same line: '# type: ignore[code]  # why this is correct here'."
+              exit 1
+              ;;
+            1)
+              echo "Every type suppression carries a reason on its own line."
+              ;;
+            *)
+              echo "::error::suppression scan error (git grep exit $rc) - failing closed instead of assuming the tree is clean."
+              exit 1
+              ;;
+          esac
+
+      - name: Count the type suppressions
+        # The census is printed rather than capped. A cap invites the argument
+        # about where to set it; a number in the log means growth is visible in
+        # the diff of two runs, and the pull request that adds the fourth
+        # suppression cannot present itself as adding none.
+        run: |
+          set -euo pipefail
+          rc=0
+          count=$(git grep -hoE '# type: ignore' -- '*.py' | wc -l) || rc=$?
+          if [ "$rc" -gt 1 ]; then
+            echo "::error::suppression census error (exit $rc) - failing closed."
+            exit 1
+          fi
+          echo "Type suppressions in tracked Python files: ${count}"

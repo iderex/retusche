@@ -20,6 +20,8 @@ from harness_rules import (
     coverage_scope_lines,
     coverage_scope_problems,
     forbidden_import_message,
+    import_boundary_message,
+    import_boundary_offences,
     module_level_forbidden_imports,
 )
 
@@ -259,3 +261,169 @@ def test_the_printed_scope_carries_the_reason_for_each_exclusion() -> None:
 @pytest.mark.parametrize("roots", [frozenset(), frozenset({"torch"})])
 def test_an_empty_file_offends_nothing(roots: frozenset[str]) -> None:
     assert module_level_forbidden_imports(b"", roots) == []
+
+
+# The import-graph rule. The vocabularies below are constructed the same way and
+# for the same reason: a graph rule exercised only against this tree is a rule
+# whose refusals are each seen once, on the day somebody trips one.
+
+_PERMITTED = frozenset({"app", "contracts"})
+
+
+def _graph(**modules: str) -> dict[str, bytes]:
+    """Modules keyed by dotted name. A double underscore in a keyword is a dot."""
+    return {name.replace("__", "."): _source(text) for name, text in modules.items()}
+
+
+def test_a_clean_graph_offends_nothing() -> None:
+    sources = _graph(
+        app="from app import jobs\n",
+        app__jobs="from contracts.engine import Engine\n",
+        contracts="",
+        contracts__engine="import dataclasses\n",
+    )
+    assert (
+        import_boundary_offences(
+            sources, {"app", "contracts"}, "app", _PERMITTED, _ROOTS
+        )
+        == []
+    )
+
+
+def test_a_runtime_reached_two_hops_away_is_reported_as_the_whole_chain() -> None:
+    """The reason the rule returns a path and not a verdict. A reader is told
+    which edge to cut, and the edge is not the one the entry point owns."""
+    sources = _graph(
+        app="from app import jobs\n",
+        app__jobs="from app import render\n",
+        app__render="import torch\n",
+    )
+    chains = import_boundary_offences(sources, {"app"}, "app", _PERMITTED, _ROOTS)
+    assert chains == [["app", "app.jobs", "app.render", "torch"]]
+
+
+def test_an_import_inside_a_function_is_reached() -> None:
+    """A deferred import is how a heavy dependency arrives in a process somebody
+    meant to keep small, and it is invisible to a module-level rule."""
+    sources = _graph(
+        app="""
+        def probe() -> int:
+            import torch
+
+            return torch.cuda.device_count()
+        """
+    )
+    chains = import_boundary_offences(sources, {"app"}, "app", _PERMITTED, _ROOTS)
+    assert chains == [["app", "torch"]]
+
+
+def test_a_project_package_outside_the_permitted_roots_is_refused() -> None:
+    """The worker arm, derived from the tree rather than from a list of names."""
+    sources = _graph(
+        app="from worker.runner import LOOP_INTERVAL\n",
+        worker="",
+        worker__runner="LOOP_INTERVAL = 5\n",
+    )
+    chains = import_boundary_offences(
+        sources, {"app", "worker"}, "app", _PERMITTED, _ROOTS
+    )
+    assert chains == [["app", "worker.runner"]]
+
+
+def test_the_walk_stops_at_the_package_it_refuses() -> None:
+    """What the worker imports is the worker's business. Following into it would
+    report a chain the orchestration layer cannot act on, and would credit the
+    entry point with a runtime it never named."""
+    sources = _graph(
+        app="import worker\n",
+        worker="import torch\n",
+    )
+    chains = import_boundary_offences(
+        sources, {"app", "worker"}, "app", _PERMITTED, _ROOTS
+    )
+    assert chains == [["app", "worker"]]
+
+
+def test_a_socket_safe_module_nothing_imports_is_still_judged() -> None:
+    """The module written today and wired up tomorrow. Judging only what the
+    entry point reaches would let it sit in the tree unexamined until the import
+    that makes it reachable lands, which is the change least likely to be read
+    as the one that crossed the boundary."""
+    sources = _graph(app="", app__orphan="import torch\n")
+    chains = import_boundary_offences(sources, {"app"}, "app", _PERMITTED, _ROOTS)
+    assert chains == [["app.orphan", "torch"]]
+
+
+def test_a_relative_import_is_resolved_and_followed() -> None:
+    sources = _graph(
+        app="from . import jobs\n",
+        app__jobs="from .render import fill\n",
+        app__render="import diffusers\n",
+    )
+    chains = import_boundary_offences(sources, {"app"}, "app", _PERMITTED, _ROOTS)
+    assert chains == [["app", "app.jobs", "app.render", "diffusers"]]
+
+
+def test_a_relative_import_beside_a_module_resolves_to_its_package() -> None:
+    """``from . import x`` means a different thing in ``app/jobs.py`` than in
+    ``app/__init__.py``, which is why the packages are named separately."""
+    sources = _graph(
+        app="", app__jobs="from . import render\n", app__render="import torch\n"
+    )
+    chains = import_boundary_offences(sources, {"app"}, "app", _PERMITTED, _ROOTS)
+    assert chains == [["app.jobs", "app.render", "torch"]]
+
+
+def test_a_relative_import_that_walks_past_the_top_is_not_guessed_at() -> None:
+    """It resolves to nothing rather than to a top-level name that happens to
+    match. A rule that guessed here would report a chain that does not exist."""
+    sources = _graph(app="from ... import torch\n")
+    assert import_boundary_offences(sources, {"app"}, "app", _PERMITTED, _ROOTS) == []
+
+
+def test_two_offending_edges_are_both_reported() -> None:
+    """One chain fixed leaves the other, so both are named in one run rather
+    than one being found after the first repair lands."""
+    sources = _graph(
+        app="from app import jobs\nfrom app import render\n",
+        app__jobs="import torch\n",
+        app__render="import onnxruntime\n",
+    )
+    chains = import_boundary_offences(sources, {"app"}, "app", _PERMITTED, _ROOTS)
+    assert chains == [
+        ["app", "app.jobs", "torch"],
+        ["app", "app.render", "onnxruntime"],
+    ]
+
+
+def test_an_entry_point_that_is_not_in_the_tree_costs_the_chain_its_head() -> None:
+    """The degradation the boundary test has an arm against.
+
+    Every offending edge is still found, because the fallback seeds each
+    socket-safe module in name order. What is lost is where the chain starts: a
+    reader is shown the module that imports the runtime rather than the path
+    from the entry point to it, which is the part that says whose problem it is.
+    """
+    sources = {
+        "z_app": b"import a_lib\n",
+        "a_lib": b"import torch\n",
+    }
+    permitted = frozenset({"z_app", "a_lib"})
+    assert import_boundary_offences(
+        sources, set(sources), "z_app", permitted, _ROOTS
+    ) == [["z_app", "a_lib", "torch"]]
+    assert import_boundary_offences(
+        sources, set(sources), "mistyped", permitted, _ROOTS
+    ) == [["a_lib", "torch"]]
+
+
+def test_the_message_draws_every_chain() -> None:
+    """The message is what a reader acts on, so it is read here rather than
+    trusted. A message that stopped printing the chain would leave a verdict and
+    a package to search by hand."""
+    message = import_boundary_message(
+        "app", [["app", "app.jobs", "torch"], ["app.orphan", "diffusers"]]
+    )
+    assert "app -> app.jobs -> torch" in message
+    assert "app.orphan -> diffusers" in message
+    assert "2 import chain(s)" in message

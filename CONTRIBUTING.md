@@ -75,7 +75,7 @@ the paths read with backslashes:
     --------------------------------------------------------------------------------
     TOTAL                                   81      0      0      0   100%
     Required test coverage of 100.0% reached. Total coverage: 100.00%
-    26 passed
+    49 passed
 
 That is the floor because it is the measurement. A floor set below what the tree
 already reaches is room a change can walk into while the gate stays green, which

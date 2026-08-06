@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Nils Lehnen
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Orchestration layer: HTTP surface, job model, model management, library client.
 
 This package must stay importable in a process that listens on a socket, so it

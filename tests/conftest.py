@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Nils Lehnen
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Where the harness rules meet this repository.
 
 The rules themselves are in ``harness_rules``, with no pytest and no tree in

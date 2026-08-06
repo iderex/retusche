@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Nils Lehnen
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """Types both layers exchange, owned by neither.
 
 Nothing here may import ``retusche`` or ``retusche_worker``. A contract that

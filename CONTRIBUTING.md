@@ -198,11 +198,32 @@ changes has a message describing one of them.
 State what changed and what failure the change prevents. Where you are
 correcting something, say what was wrong and how it was found.
 
+## What you grant, and how you say it
+
+This project is under the GNU Affero General Public License version 3, only.
+`LICENSE` holds the text, `[project] license` in `pyproject.toml` holds the
+identifier, and the first two lines of every Python file in the tree repeat it,
+so a file read a long way from this repository still carries its terms. The
+suite refuses a file without those two lines, and refuses one whose identifier
+disagrees with the project file, with a different message for each.
+
+    # Copyright (C) 2026 Your Name
+    # SPDX-License-Identifier: AGPL-3.0-only
+
+The copyright line names you. Nothing here asks you to assign or reassign it,
+and there is no contributor licence agreement: what you write stays yours, and
+it is offered under the licence above like everything else in the tree. Where
+you are contributing on behalf of an employer, the name on that line is the one
+that holds the copyright, which may not be yours.
+
 ## Sign your work
 
 Every commit carries a `Signed-off-by` trailer matching its author. By adding
 it you certify the [Developer Certificate of Origin](DCO), which is the file
-the sign-off gate names.
+the sign-off gate names. It is a statement about origin, that you wrote the
+change or have the right to submit it under the licence above, and it is not a
+transfer of anything. The two sit together: the trailer says the contribution is
+yours to give, and the header says the terms it is given under.
 
     git commit -s
 

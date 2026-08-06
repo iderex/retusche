@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Nils Lehnen
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The rules the harness applies to itself, with no pytest and no repository.
 
 Kept out of ``conftest.py`` and given plain inputs so the suite can exercise them

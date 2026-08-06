@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Nils Lehnen
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The harness judged by the same standard as everything else it judges.
 
 Every input here is written in this file. None of these tests reads the real

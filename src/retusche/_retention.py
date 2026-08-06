@@ -6,11 +6,14 @@ sweep that deletes has to use the same one.
 
 from __future__ import annotations
 
+try:
+    import torch
+except ImportError:
+    # The runtime is an optional extra, so this module works without it and
+    # simply keeps results for the longer window.
+    torch = None
+
 
 def default_retention_seconds() -> int:
-    """The window the worker already uses, so the two cannot drift apart."""
-    # Imported inside the function rather than at module level, so importing
-    # this module costs nothing at start-up.
-    from retusche_worker import DEFAULT_RETENTION_SECONDS
-
-    return DEFAULT_RETENTION_SECONDS
+    """Shorter where the runtime is present, because a result costs disk anyway."""
+    return 86_400 if torch is None else 3_600

@@ -1,0 +1,6 @@
+# A blank issue is how the problem, the evidence and the done condition get
+# skipped, so the chooser offers the two forms and nothing else. The private
+# reporting route belongs beside these once #9 has written the security policy
+# that describes it; it is deliberately not linked here before that document
+# exists.
+blank_issues_enabled: false

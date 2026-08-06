@@ -1,0 +1,52 @@
+name: Change
+description: Something to build, fix or decide, with the evidence and a done condition
+body:
+  - type: markdown
+    attributes:
+      value: |
+        An issue says what is wrong, what the evidence is, and what done means.
+        Where the evidence is a number, it carries the command that produced it.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is wrong
+      description: The problem, not the solution. What breaks, or what cannot be done, and for whom.
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: >
+        What you observed, and how. Paste the command and its output rather than
+        the conclusion you drew from it. If you are quoting a number, the command
+        that produced it goes next to it. If you have no evidence yet, write that
+        instead of writing something that reads like evidence.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: >
+        A list a reader or a machine can decide. Each line is checkable by
+        someone who was not part of this conversation. "Works properly" is not
+        one of those lines.
+      placeholder: |
+        - ...
+        - ...
+    validations:
+      required: true
+
+  - type: input
+    id: scope
+    attributes:
+      label: Scope
+      description: The paths this change is expected to touch, comma separated.
+      placeholder: src/retusche/, docs/
+    validations:
+      required: true

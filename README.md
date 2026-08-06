@@ -1,9 +1,12 @@
 # retusche
 
 A self-hosted backend for generative photo editing: remove objects, fill
-gaps, extend images. It runs entirely on your own hardware and plugs into
-photo libraries such as Immich or Nextcloud through a small API, so the
-pictures never leave the machine they live on.
+gaps, extend images. It runs on your own hardware and plugs into photo
+libraries such as Immich or Nextcloud through a small API. What that means for
+the photographs, what it does not mean, and what an operator still has to do
+for themselves is in
+[docs/legal/data-protection.md](docs/legal/data-protection.md) rather than
+restated here.
 
 The building blocks exist as open source: inpainting and outpainting models
 and the inference stacks that run them. What is missing, and what this
@@ -15,7 +18,8 @@ This repository starts with planning. The plan lives on the issue tracker;
 every architectural decision is written down there with its reasons before
 the code that depends on it exists.
 
-See [NOTICE.md](NOTICE.md) for the intended-use notice.
+See [NOTICE.md](NOTICE.md) for the intended-use notice: the uses this project
+does not support, and what it does not build.
 
 See [LICENSE](LICENSE) for the terms, the GNU Affero General Public
 License version 3.

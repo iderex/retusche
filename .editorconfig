@@ -1,0 +1,32 @@
+# Editor settings, so a file is written correctly rather than repaired later.
+# This is the earliest of the three places line endings are decided: the editor
+# writes LF, .gitattributes normalises what the editor got wrong, and the check
+# in .github/workflows/line-endings.yml refuses what survived both.
+#
+# Nothing reads this file except editors that choose to. It declares an
+# intention and refuses nothing, which is why the check exists as well.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{yml,yaml,json,md,toml}]
+indent_size = 2
+
+# Trailing whitespace is significant in markdown: two spaces at the end of a
+# line is a line break. Nothing in this tree relies on that spelling, and
+# trimming it here would still be an editor silently changing bytes in a file
+# whose whole point is to be read as written.
+[*.md]
+trim_trailing_whitespace = false
+
+# A lock file is generated. An editor that reformats one produces a diff against
+# a resolver's output, which is a fight nobody wins.
+[uv.lock]
+indent_size = 4
+insert_final_newline = true

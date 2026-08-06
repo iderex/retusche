@@ -1,0 +1,98 @@
+# Byte fidelity of the tracked tree (#11). The sibling guard, unicode-guard.yml,
+# refuses characters that make source render differently from how it executes;
+# that one is about deception. This one is about a byte being silently deleted
+# by a filter on the way into git, which is what destroys a fixture that exists
+# to prove an exact sequence of bytes. Same files, different concern.
+#
+# Both legs below read what is STORED rather than what is checked out, so the
+# verdict does not depend on the platform the run happens on. That is what lets
+# a contributor whose checkout carries CRLF get a green run on an unmodified
+# tree, which is the case this guard would otherwise fail for the wrong reason.
+name: line-endings
+
+on:
+  # Every branch and every pull request. The scan is a read-only grep over the
+  # tracked tree and has to cover a future release branch too, not only main.
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+# Read-only: the guard only reads git, it never writes.
+permissions:
+  contents: read
+
+# Cancel a superseded run on the same ref so a new push does not queue behind an
+# obsolete scan. This publishes nothing, so cancelling is safe.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # No `name:` on this job. The check-run name defaults to the job id, and a
+  # ruleset matches a required status check by its literal name, so naming the
+  # job here would rename the check and silently remove whatever was matching
+  # the old name. Same reason dependency-review.yml gives.
+  line-endings:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # No step pushes, so do not persist the token in .git/config.
+          persist-credentials: false
+
+      - name: Refuse a carriage return in tracked text
+        # Reads blobs at HEAD rather than files on disk, so a checkout filter
+        # cannot make a dirty tree look clean or a clean tree look dirty.
+        #
+        # git grep: 0 = an offender was found, 1 = clean, >=2 = scanner error.
+        # Fail closed on the error case rather than reading a broken scan as a
+        # clean tree.
+        run: |
+          set -euo pipefail
+          rc=0
+          git grep -nIP '\r' HEAD -- . || rc=$?
+          case "$rc" in
+            0)
+              echo "::error::A tracked text file above carries a carriage return. Store it with LF: the declarations in .gitattributes normalise on the way in, and docs/text-fidelity.md says how a test embeds exact bytes instead."
+              exit 1
+              ;;
+            1)
+              echo "No carriage return in tracked text."
+              ;;
+            *)
+              echo "::error::carriage-return scan error (git grep exit $rc) - failing closed instead of assuming the tree is clean."
+              exit 1
+              ;;
+          esac
+
+      - name: Refuse a stored CRLF hidden behind a binary declaration
+        # The step above cannot see a file marked `binary` in .gitattributes,
+        # because that macro implies -diff and git grep -I skips it. That is the
+        # right behaviour for a real image fixture and the wrong behaviour for a
+        # source file somebody declared binary to get past the scan.
+        #
+        # `git ls-files --eol` reports the line endings of the INDEX blob and is
+        # not fooled by the attribute: a file detected binary by content reads
+        # i/-text, while a text file hidden behind the declaration still reads
+        # i/crlf. So this leg covers exactly what the first one cannot.
+        run: |
+          set -euo pipefail
+          rc=0
+          offenders=$(git ls-files --eol | grep -E '^i/(crlf|mixed)') || rc=$?
+          case "$rc" in
+            0)
+              echo "$offenders"
+              echo "::error::The index entries above store CRLF or mixed line endings. A file that is genuinely binary reads i/-text and is not listed here; a text file declared binary is."
+              exit 1
+              ;;
+            1)
+              echo "No index entry stores CRLF or mixed line endings."
+              ;;
+            *)
+              echo "::error::index line-ending scan error (grep exit $rc) - failing closed instead of assuming the tree is clean."
+              exit 1
+              ;;
+          esac

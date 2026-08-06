@@ -1,0 +1,67 @@
+# What is stored is the project's business. What is checked out is the
+# contributor's, and this file deliberately leaves it alone except in one place.
+#
+# The reason is that this project's fixtures are bytes that have to be exact. A
+# filter that rewrites a line ending on the way into git destroys the thing a
+# fixture exists to prove, and it says nothing while doing it. So every type the
+# tree carries is declared here rather than left to a heuristic that guesses
+# right until the day it does not.
+#
+# There is no `eol=` on the text lines below, apart from the shell scripts. A
+# working tree with carriage returns is not the fault this guards against, and
+# forcing every checkout to LF would hide the fault instead of refusing it: the
+# check in .github/workflows/line-endings.yml reads what is stored, so a
+# contributor whose platform checks out CRLF gets a green run on an unmodified
+# tree. CONTRIBUTING.md carries the command that shows it.
+
+# The default. Git decides text from content and normalises what it decides is
+# text, so anything not named below still lands with LF stored.
+* text=auto
+
+# Text, by type. `diff=` picks the hunk-header driver where git ships one, so a
+# diff says which function or which section it landed in.
+*.py            text diff=python
+*.md            text diff=markdown
+*.toml          text
+*.yml           text
+*.yaml          text
+*.json          text
+*.cfg           text
+*.ini           text
+*.txt           text
+*.lock          text
+.gitattributes  text
+.gitignore      text
+.editorconfig   text
+DCO             text
+LICENSE         text
+
+# The one working-tree declaration. A carriage return in a shell script is not
+# untidiness: it lands inside the shebang line and the interpreter is not found,
+# with an error naming a file that plainly exists.
+*.sh            text eol=lf
+
+# Binary, by type. No line-ending filter, no textual diff, no merge attempt. The
+# image types are what an editing pipeline is tested against; the model artefact
+# types are what a registry entry will point at.
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.gif           binary
+*.bmp           binary
+*.tif           binary
+*.tiff          binary
+*.webp          binary
+*.avif          binary
+*.heic          binary
+*.heif          binary
+*.ico           binary
+*.safetensors   binary
+*.onnx          binary
+*.ckpt          binary
+*.pt            binary
+*.pth           binary
+*.npy           binary
+*.npz           binary
+*.bin           binary
+*.gguf          binary

@@ -27,15 +27,43 @@ In the order they should be run.
 | --- | --- |
 | Lock file matches the project file | `uv lock --check` |
 | Type check, strict | `uv run mypy` |
+| No carriage return in tracked text | `git grep -nIP '\r' HEAD -- .` |
 
 `uv lock --check` names the repair rather than performing it: it prints
 `hint: To update the lockfile, run uv lock` and exits non-zero.
+
+The line-ending scan prints the offending file and line, and prints nothing on
+a clean tree. It reads blobs at `HEAD`, not files on disk, which is why it is
+the same command everywhere; the section below says what that buys.
 
 Two gates are missing from that table and their absence is not an oversight.
 There is no format command and no lint command, which is issue #3, and there is
 no test command and no coverage floor, which is issue #5. Until those land,
 running everything in this table is not the same as running everything a change
 has to pass, and this file will say so until the rows exist.
+
+## Line endings and exact bytes
+
+Tracked text is stored with LF. `.gitattributes` declares that per file type and
+marks the binary types so no filter touches them, `.editorconfig` asks your
+editor to write LF and UTF-8 in the first place, and the `line-endings` check
+refuses what got past both.
+
+Your working copy is not judged. If you are on a platform that checks out with
+carriage returns, an unmodified tree is still green, because the check reads
+what git stores rather than what is on your disk. This is the command that shows
+which is which on your own clone:
+
+    git ls-files --eol | head -3
+
+The first column is the stored line ending and the second is your working copy.
+`i/lf w/crlf` on every line is a normal, green state, and it is what a Windows
+checkout looks like. What would be red is `i/crlf` or `i/mixed` in that first
+column, which the check's second leg refuses by name.
+
+A test that has to embed exact bytes writes them as base64 rather than as a
+literal, and `docs/text-fidelity.md` says why, along with what these checks do
+not cover.
 
 ## Suppressing a type error
 

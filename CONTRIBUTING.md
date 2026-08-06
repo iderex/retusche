@@ -26,6 +26,9 @@ In the order they should be run.
 | What | Command |
 | --- | --- |
 | Lock file matches the project file | `uv lock --check` |
+| Format the tree | `uv run ruff format` |
+| Formatting is already what it would be | `uv run ruff format --check` |
+| Lint | `uv run ruff check` |
 | Type check, strict | `uv run mypy` |
 | No carriage return in tracked text | `git grep -nIP '\r' HEAD -- .` |
 
@@ -36,11 +39,21 @@ The line-ending scan prints the offending file and line, and prints nothing on
 a clean tree. It reads blobs at `HEAD`, not files on disk, which is why it is
 the same command everywhere; the section below says what that buys.
 
-Two gates are missing from that table and their absence is not an oversight.
-There is no format command and no lint command, which is issue #3, and there is
-no test command and no coverage floor, which is issue #5. Until those land,
+One gate is missing from that table and its absence is not an oversight. There
+is no test command and no coverage floor, which is issue #5. Until it lands,
 running everything in this table is not the same as running everything a change
-has to pass, and this file will say so until the rows exist.
+has to pass, and this file will say so until the row exists.
+
+`uv run ruff format` is the repair and `--check` is the verdict, and they are
+the same binary resolved from the same lock file, so the gate and the repair
+cannot disagree about what formatted means. The rule set is in `pyproject.toml`
+and never on a command line: a flag passed in a workflow is a rule that exists
+only where that workflow runs.
+
+The formatter reaches python inside markdown as well as python in a `.py` file,
+so a fenced code block in a document is formatted like the code it shows. An
+indented block is not, because it is not fenced and nothing declares its
+language.
 
 ## Line endings and exact bytes
 
@@ -91,10 +104,22 @@ thing it describes. The checks a change actually has to pass are printed by:
 
     gh pr checks <number>
 
-Of those, one has a local equivalent today: `type-check` is reproduced by
-`uv run mypy` plus the two suppression scans in
-`.github/workflows/pull-request.yml`. The rest read the pull request itself,
-the workflow files or the advisory database, and have no local form.
+Three of them have a local equivalent today, and the name is written here beside
+the command because a name you cannot reproduce locally is a name you can only
+argue with after a red run.
+
+`type-check` is reproduced by `uv run mypy` plus the two suppression scans in
+`.github/workflows/pull-request.yml`. `lint` is reproduced by
+`uv run ruff format --check` followed by `uv run ruff check`, in that order,
+which is the order the job runs them. `line-endings` is reproduced by the scan
+in the table above together with
+
+    git ls-files --eol | grep -E '^i/(crlf|mixed)'
+
+and unlike the other two it needs nothing installed.
+
+The rest read the pull request itself, the workflow files or the advisory
+database, and have no local form.
 
 ## How a change is made
 

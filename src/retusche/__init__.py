@@ -7,8 +7,6 @@ may depend on ``retusche_contracts`` and nothing heavier. It may not import
 refuses a chain that reaches one.
 """
 
-from retusche._retention import default_retention_seconds
-
-__all__ = ["__version__", "default_retention_seconds"]
+__all__ = ["__version__"]
 
 __version__ = "0.0.0"

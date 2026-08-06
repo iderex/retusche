@@ -1,0 +1,9 @@
+# The environment uv builds from uv.lock. It is derived, never tracked.
+.venv/
+
+# Python build and import caches.
+__pycache__/
+*.py[cod]
+/build/
+/dist/
+*.egg-info/

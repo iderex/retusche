@@ -5,4 +5,8 @@ out-of-memory kill inside a native tensor library cannot take the queue down
 with it.
 """
 
-__all__: list[str] = []
+__all__ = ["DEFAULT_RETENTION_SECONDS"]
+
+# How long a finished job's result is kept. Stated here because the sweep that
+# deletes it runs in this process.
+DEFAULT_RETENTION_SECONDS = 86_400

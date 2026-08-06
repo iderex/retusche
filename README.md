@@ -16,3 +16,6 @@ every architectural decision is written down there with its reasons before
 the code that depends on it exists.
 
 See [NOTICE.md](NOTICE.md) for the intended-use notice.
+
+See [LICENSE](LICENSE) for the terms, the GNU Affero General Public
+License version 3.

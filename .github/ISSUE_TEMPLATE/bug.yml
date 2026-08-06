@@ -1,0 +1,91 @@
+name: Bug
+description: Something behaves differently from what it says it does
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This project runs machine-learning models on whatever hardware an
+        operator has. A report without the model, the device and the driver is
+        usually not reproducible, so those fields are asked for before the
+        prose rather than in a round of questions afterwards.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is wrong
+      description: What happened, and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: request
+    attributes:
+      label: The exact request that reproduced it
+      description: >
+        The request as sent, with anything private removed and the removal
+        marked. A description of the request is not the request.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: >
+        The command you ran and what it printed, the response you received, and
+        the relevant log lines. Paste the output rather than summarising it.
+      render: shell
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      description: The model identifier and the pinned version or revision.
+    validations:
+      required: true
+
+  - type: input
+    id: engine
+    attributes:
+      label: Engine
+      description: Which engine ran the job.
+    validations:
+      required: true
+
+  - type: input
+    id: hardware
+    attributes:
+      label: Hardware
+      description: The device the job ran on, and how much memory it has. Say so if it ran on a CPU.
+    validations:
+      required: true
+
+  - type: input
+    id: driver
+    attributes:
+      label: Driver version
+      description: The graphics driver and runtime version. Write "none" if there is no accelerator.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version of this project
+      description: The release, or the commit if you are running from a checkout.
+    validations:
+      required: true
+
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: >
+        What would have to be true for this report to be closed. If you do not
+        know, say so and leave it to whoever picks it up.
+    validations:
+      required: false

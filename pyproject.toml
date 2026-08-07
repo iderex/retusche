@@ -66,8 +66,8 @@ packages = [
 # visible where the rule has to decide.
 #
 # Two rules read this list. Test discovery refuses a unit test that imports any
-# of them while the module executes, and the import-graph test the orchestration
-# entry point owes refuses a chain that reaches one.
+# of them while the module executes, and the import-graph test refuses an
+# orchestration module that reaches one at any depth.
 #
 # Not on the list, deliberately: Pillow and numpy. Neither is a machine-learning
 # runtime, decoding what arrives from a stranger is the orchestration layer's own
@@ -95,6 +95,22 @@ forbidden-roots = [
     "triton",
     "xformers",
 ]
+
+# The packages that must stay importable in the process that accepts HTTP, and
+# so the only ones of this project's own packages an orchestration module may
+# reach. Everything else under src/ is out of bounds for that process, derived
+# from the tree rather than listed here, so a package arriving later is outside
+# the boundary until somebody decides otherwise.
+#
+# retusche is the orchestration layer. retusche_contracts is the engine
+# interface, which is declarations and standard-library types and is what the
+# orchestration layer is meant to talk to the worker through.
+socket-safe-roots = ["retusche", "retusche_contracts"]
+
+# Where the import-graph walk starts. Everything socket-safe is judged whether
+# or not the walk reaches it, and this only decides which module a reported
+# chain begins at.
+entry-point = "retusche"
 
 [tool.retusche.coverage-exclusions]
 # A package under src/ that coverage does not measure, and why. The suite prints

@@ -17,6 +17,11 @@ start when a package under ``src/`` is in neither list.
 Both read ``pyproject.toml``. The forbidden module roots and the exclusion
 reasons are data in one place, so a second rule wanting the same list reads the
 list rather than a copy of it.
+
+The fixtures at the bottom are the same wiring for a rule that is a test rather
+than a hook. ``test_import_boundary`` walks the import graph of the
+orchestration packages, and what it needs is the tree and the project file,
+which is what this module already knows how to read.
 """
 
 from __future__ import annotations
@@ -73,6 +78,60 @@ def _packages_in_tree() -> frozenset[str]:
         for entry in _SOURCE_ROOT.iterdir()
         if (entry / "__init__.py").is_file()
     )
+
+
+def _module_name(path: Path) -> str:
+    """The dotted name ``src/a/b/c.py`` is imported under, and ``a.b`` for a package."""
+    relative = path.relative_to(_SOURCE_ROOT).with_suffix("")
+    parts = list(relative.parts)
+    if parts[-1] == "__init__":
+        parts.pop()
+    return ".".join(parts)
+
+
+@pytest.fixture(scope="session")
+def source_modules() -> dict[str, bytes]:
+    """Every module under ``src/``, keyed by the name an import statement uses.
+
+    Read off the tree rather than out of a list, so a module added tomorrow is
+    walked without anyone remembering to register it.
+    """
+    return {
+        _module_name(path): path.read_bytes()
+        for path in sorted(_SOURCE_ROOT.rglob("*.py"))
+    }
+
+
+@pytest.fixture(scope="session")
+def source_packages() -> frozenset[str]:
+    """The dotted names under ``src/`` that are packages rather than modules.
+
+    A relative import resolves differently inside ``__init__.py`` than inside a
+    module beside it, so the walk has to be told which is which.
+    """
+    return frozenset(_module_name(path) for path in _SOURCE_ROOT.rglob("__init__.py"))
+
+
+@pytest.fixture(scope="session")
+def forbidden_roots() -> frozenset[str]:
+    """The module roots that stand for a machine-learning runtime."""
+    return _forbidden_roots()
+
+
+@pytest.fixture(scope="session")
+def socket_safe_roots() -> frozenset[str]:
+    """The project packages permitted in the process that listens on a socket."""
+    roots: list[str] = _project_config()["tool"]["retusche"]["import-boundary"][
+        "socket-safe-roots"
+    ]
+    return frozenset(roots)
+
+
+@pytest.fixture(scope="session")
+def orchestration_entry_point() -> str:
+    """The module an offending import chain is reported from."""
+    entry: str = _project_config()["tool"]["retusche"]["import-boundary"]["entry-point"]
+    return entry
 
 
 def pytest_collect_file(file_path: Path, parent: pytest.Collector) -> None:

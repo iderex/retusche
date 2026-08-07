@@ -109,6 +109,41 @@ and a class body or an `if TYPE_CHECKING:` block counts as module level, because
 those are where such an import gets written when somebody wants it to look
 conditional.
 
+## The import boundary
+
+The process that accepts HTTP does not import a machine-learning runtime, a
+model library, or the worker package. A crash or an out-of-memory kill inside a
+native tensor library takes the whole process down with it, and the queue has to
+survive that. The dependency surface reachable from a socket is also as small as
+the work allows, which it is not if it transitively includes a deep-learning
+framework.
+
+`tests/test_import_boundary.py` holds it. The test walks the import graph of
+`src/` statically and fails with the chain it found, so a run tells you which
+edge to cut rather than that something somewhere crosses the line:
+
+    retusche -> retusche.jobs -> retusche.render -> torch
+
+Which roots are refused, which of this project's own packages the socket process
+may reach, and where the walk starts are all
+`[tool.retusche.import-boundary]` in `pyproject.toml`. A package arriving under
+`src/` is outside the boundary until it is added to `socket-safe-roots`, so the
+default is the closed one.
+
+Two differences from the discovery rule above, both deliberate. This walk reads
+imports at any depth, function bodies included, because a deferred import is how
+a heavy dependency arrives in a process somebody meant to keep small. And it
+reads the tree rather than importing it, so it judges a module no runtime path
+has reached yet and needs none of the refused packages installed to say that
+something reaches them.
+
+What it cannot see is written in the test's own docstring rather than here: a
+module loaded through `importlib` or a name assembled at runtime, a subprocess,
+and anything a third-party package imports once the chain leaves `src/`. Work
+that needs the runtime goes behind the engine interface in `retusche_contracts`
+and runs in the worker process. Running the worker in a process of its own and
+supervising it is issue #17.
+
 ## Line endings and exact bytes
 
 Tracked text is stored with LF. `.gitattributes` declares that per file type and

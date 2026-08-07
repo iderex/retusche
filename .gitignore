@@ -7,3 +7,11 @@ __pycache__/
 /build/
 /dist/
 *.egg-info/
+
+# What a test run leaves behind. The coverage database is the raw measurement
+# the report is derived from; tracking it would put a number in the tree that
+# nobody re-derives and everybody trusts.
+.coverage
+.coverage.*
+/htmlcov/
+.pytest_cache/

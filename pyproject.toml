@@ -56,6 +56,17 @@ packages = [
     "src/retusche_worker",
 ]
 
+# Kept out of the artefact an operator installs. `retusche.testing` holds an
+# implementation of the engine contract that reaches no device and produces
+# derived noise, which is what the suite needs and what nothing outside it has a
+# use for. A test double reachable from an installed service is a thing somebody
+# eventually selects by accident, and the accident is silent: the jobs succeed.
+#
+# The path is anchored with a leading slash so it names this directory and not
+# any `testing` further down. `tests/test_packaging.py` says what the check over
+# this line does and does not establish.
+exclude = ["/src/retusche/testing"]
+
 [tool.retusche]
 # This project's own data, read by the suite rather than restated inside it.
 

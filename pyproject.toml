@@ -34,7 +34,6 @@ worker = []
 # pytest-cov's range would move the number without anything in this file
 # changing.
 dev = [
-    "coverage==7.15.3",
     "mypy==2.3.0",
     "pytest==9.1.1",
     "pytest-cov==7.1.0",

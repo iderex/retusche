@@ -5,9 +5,12 @@ describes the shape the plan builds towards. Where a part of that shape is not
 in the tree yet, this document says so rather than describing it in the present
 tense; the issue that builds it is named instead.
 
-What exists today is the package skeleton: three packages under `src/`, each
-with a docstring and a `py.typed` marker, and no runtime dependency in either
-layer. The tree holds no HTTP surface, no queue, no engine and no store.
+What exists today is the package skeleton and two things inside it: three
+packages under `src/`, each with a docstring and a `py.typed` marker and no
+runtime dependency in either layer; the engine interface, in
+`retusche_contracts`; and one implementation of that interface, in
+`retusche.testing`, which reaches no device. The tree holds no HTTP surface, no
+queue, no store, and no engine that reaches a model.
 
 ## The packages
 
@@ -22,6 +25,14 @@ inside a native tensor library takes the whole process down, and the queue has
 to survive that. The second is that the dependency surface reachable from a
 socket should be as small as the work allows, which it is not if it
 transitively pulls in a deep-learning framework.
+
+`retusche.testing` is a subpackage of it, and it holds one implementation of the
+engine contract that reaches no device: the thing the suite runs an engine's
+part against when there is no engine to run. It is built into the tree and kept
+out of the wheel by `[tool.hatch.build.targets.wheel] exclude` in the project
+file, because an engine an operator can select that returns derived content
+rather than an edited photograph is a failure nothing reports. #15 is where it
+is argued.
 
 **`retusche_worker`** is the engine worker. It holds the engine implementations
 and it is the only package permitted a machine-learning runtime. It runs in its
@@ -75,12 +86,21 @@ The boundary is the rule that `retusche` must not reach a machine-learning
 runtime, a model library, or `retusche_worker`, by any import chain rather than
 only directly.
 
-**There is no test holding it yet.** Issue #7 is where that test is built: it
-walks the import graph of the orchestration entry point, fails on a forbidden
-import, and names the offending chain rather than only the fact of a failure.
-Until it lands, the boundary is a sentence in this document and in three
-docstrings, which is worth nothing that a machine refuses. This paragraph is
-replaced by a pointer to that test when it exists, not amended to sound better.
+`tests/test_import_boundary.py` holds it, and it runs in the default suite.
+
+The paragraph that stood here said there was no such test, named #7 as where one
+would be built, and said of itself that it would be replaced by a pointer to
+that test when it existed rather than amended to sound better. The test landed
+and the paragraph did not move. So this document went on telling a reader the
+boundary was a sentence nothing refused, while a check in the same tree was
+refusing violations of it, and the two disagreed for as long as nobody read them
+together.
+
+What the walk covers, what it cannot see, and which module roots it refuses are
+in that file's own docstring and in `[tool.retusche.import-boundary]` in
+`pyproject.toml`. They are not repeated here. A restatement drifts against the
+thing it describes, and this section is what the drift looks like once it has
+happened.
 
 ## The checks
 

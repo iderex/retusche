@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Nils Lehnen
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The heavy runtime stays out of the process that listens on a socket.
 
 Two reasons, and neither is style. A crash or an out-of-memory kill inside a

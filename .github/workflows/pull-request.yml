@@ -1,7 +1,7 @@
 # Gates that run against the project's own code, as opposed to the guards that
-# judge supply chain and workflow hygiene. It holds the type gate, the
-# format-and-lint gate and the test gate; which of these names has to stand in
-# front of the default branch is #6.
+# judge supply chain and workflow hygiene. It holds the lock gate, the type
+# gate, the format-and-lint gate and the test gate; which of these names has to
+# stand in front of the default branch is #6.
 #
 # No `name:` on the jobs below: the ruleset that guards the default branch
 # matches a required status check by its literal check-run name, which defaults
@@ -25,6 +25,35 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  lock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read # checkout only
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Nothing here needs history and no step pushes.
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+
+      - name: The lock file matches the project file
+        # Not the same check as `uv sync --locked` in the jobs below. That one
+        # refuses to install against a lock that disagrees with the project
+        # file, which is this drift caught at the moment it would produce a
+        # wrong environment. This one asks whether a resolve would rewrite the
+        # lock at all, and answers before anything is installed.
+        #
+        # It reports and never repairs: on a drift it prints
+        # `hint: To update the lockfile, run uv lock` and exits non-zero, so the
+        # branch is left exactly as the author pushed it and the repair is a
+        # thing they do rather than a thing a runner did to their tree.
+        run: uv lock --check
+
   type-check:
     runs-on: ubuntu-latest
     timeout-minutes: 10

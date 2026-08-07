@@ -193,9 +193,15 @@ thing it describes. The checks a change actually has to pass are printed by:
 
     gh pr checks <number>
 
-Four of them have a local equivalent today, and the name is written here beside
+Five of them have a local equivalent today, and the name is written here beside
 the command because a name you cannot reproduce locally is a name you can only
 argue with after a red run.
+
+`lock` is reproduced by `uv lock --check` exactly. It is a different question
+from the `--locked` flag the other three jobs pass: that flag refuses to install
+against a lock which disagrees with the project file, and this asks whether a
+resolve would rewrite the lock at all. It reports and never repairs, which is
+the sentence above the table.
 
 `type-check` is reproduced by `uv run mypy` plus the two suppression scans in
 `.github/workflows/pull-request.yml`. `lint` is reproduced by

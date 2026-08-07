@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Nils Lehnen
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """What the engine contract states about itself, checked against the module.
 
 Nothing here exercises an engine, because no engine exists yet. What it holds is

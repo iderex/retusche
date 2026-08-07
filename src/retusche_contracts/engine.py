@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Nils Lehnen
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The one interface every engine is reached through.
 
 An engine is whatever actually edits pixels: the erase model, a diffusion

@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Nils Lehnen
+# SPDX-License-Identifier: AGPL-3.0-only
+
 """The two places this project states its own version, held together.
 
 ``retusche.__version__`` is what a running service reports about itself, in a log

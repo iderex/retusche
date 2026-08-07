@@ -251,6 +251,20 @@ it is offered under the licence above like everything else in the tree. Where
 you are contributing on behalf of an employer, the name on that line is the one
 that holds the copyright, which may not be yours.
 
+The rule reads every Python file in the tree and not only the ones your branch
+changed, which is worth knowing while several branches are open. A branch that
+adds a file without the header is green as long as the rule is not in its base,
+and a branch that adds the rule is green as long as that file is not in its
+base; the tree where both exist is the merged one, and no check in this
+repository answers on that tree. It happened once, at issue #117. If your branch
+has been open a while, merge the default branch into it and run the suite before
+merging rather than after.
+
+The walk covers this repository's own directories and skips anything under a
+dot-prefixed one, so a Python file under `.github/` carries no header and is not
+asked for one. That is the shape of the walk rather than a decision about those
+files.
+
 ## Sign your work
 
 Every commit carries a `Signed-off-by` trailer matching its author. By adding

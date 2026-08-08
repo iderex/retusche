@@ -5,22 +5,26 @@ describes the shape the plan builds towards. Where a part of that shape is not
 in the tree yet, this document says so rather than describing it in the present
 tense; the issue that builds it is named instead.
 
-What exists today is the package skeleton and five things inside it: the engine
+What exists today is the package skeleton and six things inside it: the engine
 interface, in `retusche_contracts`; one implementation of that interface, in
 `retusche.testing`, which reaches no device; the job model, in `retusche.queue`,
 which is the states a job moves through and a durable store for them; the model
 registry's shape, in `retusche.models`, which is what a model entry declares and
-what an incomplete one is refused for; and the mask, in `retusche.masking`,
-which is what a caller may send and where a shape's edge lands. The tree holds
-no HTTP surface, no admission control, no lane, no result store, no download
-path, and no engine that reaches a model. `models/registry/` holds no model, for
-a reason that directory's own README states.
+what an incomplete one is refused for; the mask, in `retusche.masking`, which is
+what a caller may send and where a shape's edge lands; and the configuration
+surface, in `retusche.config`, which is every setting declared in one place and
+a load that refuses the whole of a wrong one. The tree holds no HTTP surface, no
+admission control, no lane, no result store, no download path, and no engine
+that reaches a model. `models/registry/` holds no model, for a reason that
+directory's own README states, and `retusche.config` declares two settings for a
+reason its own module says.
 
 ## The packages
 
 **`retusche`** is the orchestration layer. It is the process that listens on a
 socket. It holds the HTTP surface, the job model, model management, the mask
-rules a request is judged against, and the photo-library client.
+rules a request is judged against, the configuration surface, and the
+photo-library client.
 
 It may depend on `retusche_contracts` and on nothing heavier. It may not import
 `retusche_worker`, a machine-learning runtime, or a model library. Two reasons,
@@ -131,7 +135,11 @@ Two rules #83 asks for are still absent, and neither is held by anything above.
 The integration package not being imported by the queue is a direction inside
 `retusche`, and these rules judge roots, so holding it needs an order declared
 within one package and nothing reads one. And every configuration setting
-appearing in a generated reference needs a configuration surface, which is #62.
+appearing in a generated reference now has a surface to be a rule about:
+`retusche.config` declares the settings and `tests/test_configuration.py`
+refuses a committed reference page that differs from what the declaration
+produces. That is a test beside the package rather than a conformance rule, and
+whether it belongs among these is #83's to decide.
 
 ## The checks
 

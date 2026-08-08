@@ -247,6 +247,48 @@ def _write_raw(path: Path, job_id: str, state: str, reason: str | None) -> None:
         connection.close()
 
 
+def test_a_recovery_that_fails_part_way_writes_none_of_it(store_path: Path) -> None:
+    """The rollback, on the one path where a write can be followed by a refusal.
+
+    Recovery settles the running jobs one row at a time inside a single
+    transaction, so it is the only place in this module where something can fail
+    after a write has already been made. The second row here is a running job
+    carrying a reason, which is a pair the state machine refuses, and it is put
+    in the file the way a hand edit or a store written by another version would
+    put it there.
+
+    Written because deleting the rollback and committing instead reddened
+    nothing: every other refusal happens before that transaction's first write,
+    where a commit and a rollback are the same empty thing. A guard whose
+    removal changes no verdict is a guard nothing holds.
+    """
+    with JobStore(store_path) as first:
+        first.accept("job-1")
+        first.move("job-1", JobState.QUEUED)
+        first.move("job-1", JobState.RUNNING)
+    _write_raw(store_path, "job-2", "running", "completed")
+
+    with JobStore(store_path) as second:
+        with pytest.raises(CorruptJobStoreError):
+            second.recover_after_restart()
+        assert second.read("job-1").state is JobState.RUNNING
+
+
+def test_a_store_still_takes_writes_after_a_refusal(store: JobStore) -> None:
+    """A refused move ends its transaction, so the next one can open its own.
+
+    The failure this catches is the transaction left open by a raise between
+    ``BEGIN`` and the end of the block. Nothing about the refusal itself would
+    look wrong; the next write would fail instead, one call later and for a
+    reason naming neither job.
+    """
+    store.accept("job-1")
+    with pytest.raises(IllegalTransitionError):
+        store.move("job-1", JobState.RUNNING)
+    assert store.move("job-1", JobState.QUEUED).state is JobState.QUEUED
+    assert store.accept("job-2").state is JobState.ACCEPTED
+
+
 def test_a_state_this_version_does_not_declare_is_refused(
     store: JobStore, store_path: Path
 ) -> None:

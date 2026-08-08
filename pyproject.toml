@@ -123,6 +123,31 @@ socket-safe-roots = ["retusche", "retusche_contracts"]
 # chain begins at.
 entry-point = "retusche"
 
+[tool.retusche.layer-imports]
+# Each package under src/ and the packages of this project it may reach, itself
+# included. Read by tests/conformance/, which walks the import graph from each row
+# and refuses a chain that leaves that row's set, at any depth and function bodies
+# included.
+#
+# The orchestration layer has no row here. Its set is socket-safe-roots above,
+# which the boundary rule reads, and a copy of it here would be two lists for one
+# property with nothing refusing a divergence between them. The conformance suite
+# refuses a package under src/ that is in neither place, so a package arriving
+# tomorrow is judged by one of the two rather than by neither.
+#
+# Runtime roots are not repeated either. forbidden-roots above is refused to the
+# socket-safe packages by the boundary rule and is permitted to the worker by the
+# layout, so what these rows decide is this project's own edges and nothing else.
+#
+# The worker may reach the contract and not the orchestrator: a worker that
+# reaches back into the orchestrator turns two operating-system processes into one
+# program split across a pipe, and the process boundary exists so the queue
+# survives a native crash. The contract may reach neither of its users: a contract
+# that imports one of them makes the other's dependency on the contract a
+# dependency on that user.
+retusche_worker = ["retusche_worker", "retusche_contracts"]
+retusche_contracts = ["retusche_contracts"]
+
 [tool.retusche.coverage-exclusions]
 # A package under src/ that coverage does not measure, and why. The suite prints
 # every entry at the end of a run: a report that simply left the package out

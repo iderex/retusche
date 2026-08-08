@@ -5,12 +5,15 @@ describes the shape the plan builds towards. Where a part of that shape is not
 in the tree yet, this document says so rather than describing it in the present
 tense; the issue that builds it is named instead.
 
-What exists today is the package skeleton and three things inside it: the engine
+What exists today is the package skeleton and four things inside it: the engine
 interface, in `retusche_contracts`; one implementation of that interface, in
-`retusche.testing`, which reaches no device; and the job model, in
-`retusche.queue`, which is the states a job moves through and a durable store
-for them. The tree holds no HTTP surface, no admission control, no lane, no
-result store, and no engine that reaches a model.
+`retusche.testing`, which reaches no device; the job model, in `retusche.queue`,
+which is the states a job moves through and a durable store for them; and the
+model registry's shape, in `retusche.models`, which is what a model entry
+declares and what an incomplete one is refused for. The tree holds no HTTP
+surface, no admission control, no lane, no result store, no download path, and
+no engine that reaches a model. `models/registry/` holds no model, for a reason
+that directory's own README states.
 
 ## The packages
 

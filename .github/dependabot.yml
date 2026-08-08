@@ -18,6 +18,14 @@
 # the same checks as any other, and `.github/workflows/dco.yml` already exempts
 # the bot author by name from the sign-off gate, as the DCO App does, because a
 # bot commit cannot self-certify the DCO.
+#
+# Each entry carries a cooldown. An updater with none picks a version up the
+# moment it is published, which is the window a compromised release is
+# exploited in: the account is taken over, a version goes out, and every
+# repository watching it opens a pull request against the bad one before anyone
+# has noticed. Waiting a week costs a week of being behind and buys the time in
+# which such a release is normally pulled. `.github/workflows/zizmor.yml`
+# refuses a configuration without one.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -25,6 +33,8 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
     # Deliberately small. A batch nobody can read is a batch that gets merged
     # unread.
     open-pull-requests-limit: 3
@@ -45,4 +55,6 @@ updates:
     schedule:
       interval: weekly
       day: monday
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 3

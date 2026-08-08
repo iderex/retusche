@@ -100,6 +100,10 @@ so the command is the authority and what follows is what it printed at the
 commit that added this paragraph:
 
     gh api --paginate "repos/iderex/retusche/actions/runs?per_page=100" --jq '.workflow_runs[] | select(.conclusion=="failure") | "\(.name)\t\(.id)\t\(.event)"'
+    DCO	31278493644	pull_request
+    Workflow Security Analysis	31263873834	pull_request
+    Pull request checks	31224376469	pull_request
+    Code scanning	31125864932	pull_request
     unicode-guard	31111491469	pull_request
     Workflow Security Analysis	31111490977	pull_request
     Pull request checks	31111490893	pull_request
@@ -108,6 +112,17 @@ commit that added this paragraph:
     Pull request checks	31097265500	pull_request
     line-endings	31095816028	push
     line-endings	31095690232	push
+
+Four of those rows are newer than the rest of this section and only one of them
+is an observation this file rests on. `31278493644` is the sign-off run recorded
+in its entry below. `31263873834` is a second refusal by
+`Audit workflows (zizmor)`, on a branch that has since landed, and that name
+already carried an observation. The other two come from branches that have not
+landed: `31224376469` publishes a job named `lock`, which is on no head this
+document maps, and `31125864932` is `Code scanning (CodeQL)`, which is #76's and
+is not a published name here yet. Neither is evidence about a check in the sets
+below, and both are listed because the command above prints them and a listing
+trimmed to what suits the argument is not a listing.
 
 A workflow run is not a check name, so a run that holds more than one job is
 read at the job level:
@@ -120,11 +135,12 @@ read at the job level:
     type-check	failure
     lint	success
 
-Five published names have been watched refusing something: `lint`,
-`line-endings`, `type-check`, `Reject Trojan Source Unicode` and
-`Audit workflows (zizmor)`. Each refused a near miss written to make it refuse,
-each went green again when the fixture came out, and each entry below cites the
-run. The remaining names have only ever been seen passing.
+Six published names have been watched refusing something: `lint`,
+`line-endings`, `type-check`, `Reject Trojan Source Unicode`,
+`Audit workflows (zizmor)` and `DCO sign-off`. Each refused a near miss written
+to make it refuse, and each entry below cites the run. Five of the six went
+green again when the fixture came out. The sixth could not, and its entry says
+why. The remaining names have only ever been seen passing.
 
 Every one of those near misses was refused by its own gate and by no other. On
 the head that carried all three of the most recent ones, the checks that had
@@ -181,10 +197,38 @@ returned the number it was given. The fixture was removed once the run existed.
 
 `DCO sign-off`, declared in `.github/workflows/dco.yml`. This is the term on
 which a change from outside is accepted. A term that does not block a merge is
-not a term. Green observed on the same head. Red not observed, and it is the
-awkward one to observe: the job reads every commit in the pull request, so a red
-run is produced by one commit without the trailer and is cleared only by
-rewriting the branch, which is why no run has produced one so far.
+not a term. Green observed on the same head. Red observed at run `31278493644`,
+on head `7cd91f9b6aa48e18885e292555bac9389e404e79`, which is one empty commit
+made without `git commit -s`:
+
+    FAIL  7cd91f9b6aa48e18885e292555bac9389e404e79 is missing: Signed-off-by: Nils Lehnen <30603423+iderex@users.noreply.github.com>
+    ::error::One or more commits lack a DCO Signed-off-by matching the author.
+
+Every other check on that head stayed green, so what the run establishes is that
+this gate refuses the absence of the trailer rather than that something about
+the commit was wrong:
+
+    gh api "repos/iderex/retusche/commits/7cd91f9b6aa48e18885e292555bac9389e404e79/check-runs?per_page=100" --jq '.check_runs[] | "\(.name)	\(.conclusion)"' | sort
+    Audit workflows (zizmor)	success
+    DCO sign-off	failure
+    dependency-review	success
+    line-endings	success
+    line-endings	success
+    lint	success
+    Reject Trojan Source Unicode	success
+    Reject Trojan Source Unicode	success
+    test	success
+    type-check	success
+    zizmor	success
+
+The fixture was not removed the way the others were, and it could not be. The
+job reads every commit in the pull request, so a branch that reddens it goes
+green again only by rewriting its own history. The observation therefore comes
+from a branch of its own carrying nothing but that commit, whose pull request
+was closed rather than merged once the run existed. What the run does not
+establish is that the gate refuses a trailer whose name or address does not
+match the author. That is a second property of the same job and it needs its own
+fixture.
 
 `Reject Trojan Source Unicode`, declared in
 `.github/workflows/unicode-guard.yml`. Bidirectional control characters make a

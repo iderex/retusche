@@ -102,6 +102,31 @@ in that file's own docstring and in `[tool.retusche.import-boundary]` in
 thing it describes, and this section is what the drift looks like once it has
 happened.
 
+## The other two directions
+
+The boundary above is one of three dependency rules this document states. The
+other two are that the worker does not import the orchestrator and that the
+contract imports neither of its users. Both were sentences nothing refused, on
+packages that already exist, while the section above pointed at a test that
+passes them: the walk permits every socket-safe root to reach every other, and it
+never seeds the worker at all. So a contract module recording the version it was
+built against, or an engine reaching for the test double as a fallback, went
+through the formatter, the linter, the type checker and the suite.
+
+`tests/conformance/` holds those two now, off
+`[tool.retusche.layer-imports]` in `pyproject.toml`, and it refuses a package
+under `src/` that no rule judges, so the next package to arrive is judged rather
+than assumed. Which sets are declared, and what the walk can and cannot see, are
+in that directory's own modules and in the project file rather than repeated
+here. `tests/conformance/test_the_layer_rules_bite.py` is where each refusal is
+shown to happen against a tree built to break exactly that rule.
+
+Two rules #83 asks for are still absent, and neither is held by anything above.
+The integration package not being imported by the queue is a direction inside
+`retusche`, and these rules judge roots, so holding it needs an order declared
+within one package and nothing reads one. And every configuration setting
+appearing in a generated reference needs a configuration surface, which is #62.
+
 ## The checks
 
 This document does not list them. A list here drifts against the workflows it

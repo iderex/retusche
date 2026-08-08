@@ -369,9 +369,11 @@ confidence in it.
 `Automatic Dependency Submission`. Matched. It runs here as `update-uv-graph`
 and is advisory for the reason the section above gives.
 
-`Dependabot Updates`. Not matched. Nothing in this tree configures it, and the
-control it stands for, dependencies that are pinned and a lock file that cannot
-drift, is #81.
+`Dependabot Updates`. Matched. `.github/dependabot.yml` configures it over the
+action pins and over `uv.lock`, so a version change arrives as a pull request
+that meets the whole gate. The check name it publishes under is not observed
+here, because nothing has run yet; the rest of the control it stands for, a lock
+file that cannot drift and artefacts that trace back to a commit, is #81.
 
 `.NET`. Replaced by the `type-check` and `test` jobs, which is where that
 language's build and test verbs live here. #5 delivers the second.

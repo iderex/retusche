@@ -1,0 +1,60 @@
+# Dependency version updates arrive as pull requests that run the whole gate,
+# rather than as edits applied to the default branch by hand.
+#
+# Two ecosystems, because this tree pins in two places.
+#
+# The workflows pin every action to a commit sha with the version in a trailing
+# comment, which is the form this updater rewrites in place, comment included.
+# Without it those pins sit at whatever was current on the day each workflow was
+# written, and the pinning that makes a supply chain reproducible is the same
+# property that makes it stale.
+#
+# `uv.lock` holds the resolved development set. `uv sync --locked` refuses a tree
+# whose lock and project file disagree, so a version change cannot arrive as a
+# resolve on somebody's machine; it has to arrive as a committed lock somebody
+# reviewed.
+#
+# Nothing here is exempt from anything. A pull request from this updater meets
+# the same checks as any other, and `.github/workflows/dco.yml` already exempts
+# the bot author by name from the sign-off gate, as the DCO App does, because a
+# bot commit cannot self-certify the DCO.
+#
+# Each entry carries a cooldown. An updater with none picks a version up the
+# moment it is published, which is the window a compromised release is
+# exploited in: the account is taken over, a version goes out, and every
+# repository watching it opens a pull request against the bad one before anyone
+# has noticed. Waiting a week costs a week of being behind and buys the time in
+# which such a release is normally pulled. `.github/workflows/zizmor.yml`
+# refuses a configuration without one.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    # Deliberately small. A batch nobody can read is a batch that gets merged
+    # unread.
+    open-pull-requests-limit: 3
+    groups:
+      # One pull request for the routine sha refreshes, so a week of them is one
+      # review rather than one per workflow. A major bump stays on its own,
+      # because that is the one where the action's inputs can have changed under
+      # the pin.
+      actions:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 3

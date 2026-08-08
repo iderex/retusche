@@ -144,6 +144,34 @@ that needs the runtime goes behind the engine interface in `retusche_contracts`
 and runs in the worker process. Running the worker in a process of its own and
 supervising it is issue #17.
 
+## A new engine is not complete until the contract suite runs against it
+
+`tests/contract/` holds the clauses every engine is held to: what a capability
+declaration promises and whether it holds still, what an estimate may cost, what
+a mask of zeroes means, what a mask covering everything means, what progress
+reports, what cancelling does before the first step and during the run, and what
+a request outside the declaration gets. The clauses are written against the
+interface and against no engine, and they run once per entry in
+`tests/contract/engine_register.py`.
+
+An engine absent from that register has been held to none of it. Adding one is
+one entry: the name the engine declares as its `engine_id`, how to build a fresh
+instance, and the largest per-channel difference it may show on a pixel its mask
+left at zero. That last number is the only thing an entry states that the
+engine's own declaration does not, and it is there so a diffusion engine can be
+registered without the clause being loosened for the engines that do copy those
+pixels.
+
+An engine needing a device is registered in the hardware harness rather than
+here, under the same clause bodies so the two cannot drift. That harness is
+issue #85 and is not in the tree, so today the register holds one entry and what
+the suite establishes is that the clauses are executable and that the fake meets
+them, not that two engines agree.
+
+`tests/contract/test_the_suite_bites.py` runs each clause against an engine
+built to break exactly that clause. A clause added without an entry there is a
+clause nothing has shown can fail.
+
 ## Line endings and exact bytes
 
 Tracked text is stored with LF. `.gitattributes` declares that per file type and

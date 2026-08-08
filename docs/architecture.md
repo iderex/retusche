@@ -5,12 +5,12 @@ describes the shape the plan builds towards. Where a part of that shape is not
 in the tree yet, this document says so rather than describing it in the present
 tense; the issue that builds it is named instead.
 
-What exists today is the package skeleton and two things inside it: three
-packages under `src/`, each with a docstring and a `py.typed` marker and no
-runtime dependency in either layer; the engine interface, in
-`retusche_contracts`; and one implementation of that interface, in
-`retusche.testing`, which reaches no device. The tree holds no HTTP surface, no
-queue, no store, and no engine that reaches a model.
+What exists today is the package skeleton and three things inside it: the engine
+interface, in `retusche_contracts`; one implementation of that interface, in
+`retusche.testing`, which reaches no device; and the job model, in
+`retusche.queue`, which is the states a job moves through and a durable store
+for them. The tree holds no HTTP surface, no admission control, no lane, no
+result store, and no engine that reaches a model.
 
 ## The packages
 
@@ -55,14 +55,16 @@ installed.
 
 ## The path a single edit takes
 
-This is the plan, not a description of running code. None of the components
-below exists in the tree yet; each is named with the issue that builds it.
+This is the plan, not a description of running code. One component below is in
+the tree, the job store, and it is marked where it appears; nothing else is, and
+each of those is named with the issue that builds it.
 
 A caller sends an image reference and a mask to the editing endpoint (#47, #48,
 #49). The orchestration layer decodes and validates the request, refusing a
 mask that is not one (#46) and an image whose format, size or decoding is
-outside what is accepted (#51). It records a job in the durable job store and
-answers with the job identifier (#26); the caller polls or is notified (#52).
+outside what is accepted (#51). It records a job in the durable job store, which
+is `retusche.queue` and is in the tree, and answers with the job identifier; the
+caller polls or is notified (#52).
 
 Admission control decides when that job reaches the device (#27, #30). One lane
 runs at a time, and the memory budget is checked before admission rather than

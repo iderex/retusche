@@ -5,21 +5,22 @@ describes the shape the plan builds towards. Where a part of that shape is not
 in the tree yet, this document says so rather than describing it in the present
 tense; the issue that builds it is named instead.
 
-What exists today is the package skeleton and four things inside it: the engine
+What exists today is the package skeleton and five things inside it: the engine
 interface, in `retusche_contracts`; one implementation of that interface, in
 `retusche.testing`, which reaches no device; the job model, in `retusche.queue`,
-which is the states a job moves through and a durable store for them; and the
-model registry's shape, in `retusche.models`, which is what a model entry
-declares and what an incomplete one is refused for. The tree holds no HTTP
-surface, no admission control, no lane, no result store, no download path, and
-no engine that reaches a model. `models/registry/` holds no model, for a reason
-that directory's own README states.
+which is the states a job moves through and a durable store for them; the model
+registry's shape, in `retusche.models`, which is what a model entry declares and
+what an incomplete one is refused for; and the mask, in `retusche.masking`,
+which is what a caller may send and where a shape's edge lands. The tree holds
+no HTTP surface, no admission control, no lane, no result store, no download
+path, and no engine that reaches a model. `models/registry/` holds no model, for
+a reason that directory's own README states.
 
 ## The packages
 
 **`retusche`** is the orchestration layer. It is the process that listens on a
-socket. It holds the HTTP surface, the job model, model management and the
-photo-library client.
+socket. It holds the HTTP surface, the job model, model management, the mask
+rules a request is judged against, and the photo-library client.
 
 It may depend on `retusche_contracts` and on nothing heavier. It may not import
 `retusche_worker`, a machine-learning runtime, or a model library. Two reasons,
@@ -58,16 +59,16 @@ installed.
 
 ## The path a single edit takes
 
-This is the plan, not a description of running code. One component below is in
-the tree, the job store, and it is marked where it appears; nothing else is, and
-each of those is named with the issue that builds it.
+This is the plan, not a description of running code. Two components below are in
+the tree, the mask rules and the job store, and each is marked where it appears;
+nothing else is, and each of those is named with the issue that builds it.
 
 A caller sends an image reference and a mask to the editing endpoint (#47, #48,
-#49). The orchestration layer decodes and validates the request, refusing a
-mask that is not one (#46) and an image whose format, size or decoding is
-outside what is accepted (#51). It records a job in the durable job store, which
-is `retusche.queue` and is in the tree, and answers with the job identifier; the
-caller polls or is notified (#52).
+#49). The orchestration layer decodes and validates the request, refusing a mask
+that is not one, which is `retusche.masking` and is in the tree, and an image
+whose format, size or decoding is outside what is accepted (#51). It records a
+job in the durable job store, which is `retusche.queue` and is in the tree, and
+answers with the job identifier; the caller polls or is notified (#52).
 
 Admission control decides when that job reaches the device (#27, #30). One lane
 runs at a time, and the memory budget is checked before admission rather than

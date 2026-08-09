@@ -13,7 +13,7 @@ What an entry looks like:
 
 ```toml
 identifier = "example-erase-small"
-source = "https://example.invalid/example-erase-small/resolve/main/model.onnx"
+source = "https://example.invalid/example-erase-small/resolve/3f6a1c0d9b8e7a6f5d4c3b2a1908f7e6d5c4b3a2/model.onnx"
 digest = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
 size_bytes = 1
 device_memory_bytes = 1
@@ -29,6 +29,16 @@ That example is in this document and not in this directory, and it is not a
 model: the source does not resolve, the digest is not the digest of anything and
 the sizes are placeholders. An example file here would load, and a registry
 holding one entry that is not a model is worse than one holding none.
+
+The long hexadecimal string in the middle of that source is the point of it. It
+read `main` until the check that refuses a moving revision landed, which is the
+shape a download URL has when it is copied out of a browser, and it is what an
+entry says when it means "whichever file is there when somebody fetches". The
+digest below it would then refuse the artefact that arrives, so the second
+operator to install the model gets a verification failure and a record that
+reads as correct. Changing which artefact an entry names is a change to its
+revision in its own file, and the reason belongs in the message of the commit
+that makes it. Nothing refuses a change made without one.
 
 ## This directory holds no model yet
 

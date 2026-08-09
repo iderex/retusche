@@ -22,6 +22,7 @@ No device, no display and no elevation is needed by anything here.
 
 from __future__ import annotations
 
+import re
 import tomllib
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -34,6 +35,7 @@ from retusche.models.registry import (
     RegistryError,
     entry_from_mapping,
     load_registry,
+    pinned_revision,
 )
 from retusche_contracts.engine import Operation
 
@@ -41,6 +43,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 _DIGEST = "sha256:" + "ab" * 32
+_COMMIT = "3f6a1c0d9b8e7a6f5d4c3b2a1908f7e6d5c4b3a2"
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -221,6 +224,121 @@ def test_a_named_non_standard_licence_is_accepted() -> None:
         "example.toml",
     )
     assert entry.licence.identifier == "flux-1-dev-non-commercial-license"
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        f"https://example.invalid/example-erase-small/resolve/{_COMMIT}/model.onnx",
+        f"https://example.invalid/example-erase-small/resolve/{'a1' * 32}/model.onnx",
+        f"https://example.invalid/example-erase-small/raw/{_COMMIT}/model.onnx",
+        f"https://example.invalid/download?file=model.onnx&revision={_COMMIT}",
+    ],
+)
+def test_a_source_pinned_to_a_whole_commit_hash_is_accepted(source: str) -> None:
+    """Both hash lengths, and both forms a revision is written in."""
+    assert entry_from_mapping(_with("source", source), "example.toml").source == source
+
+
+@pytest.mark.parametrize(
+    "revision",
+    [
+        "main",
+        "master",
+        "v1.4.0",
+        _COMMIT[:7],
+        _COMMIT.upper(),
+    ],
+)
+@pytest.mark.parametrize("segment", ["resolve", "blob", "raw"])
+def test_a_source_naming_a_revision_that_can_move_is_refused(
+    revision: str, segment: str
+) -> None:
+    """The near miss is `resolve/main`, which is what a model host hands you.
+
+    Copying the download URL out of a browser gives that shape, the entry loads
+    everywhere it is read, and the digest beside it makes the whole record look
+    pinned. `v1.4.0` is the same mistake wearing an immutable-looking name: a
+    tag is a pointer and it can be moved. The abbreviated hash is unambiguous in
+    the repository it was shortened against and stops being so as that
+    repository grows, and the upper-case one is the same defect as an
+    upper-case digest, two spellings of one artefact.
+    """
+    source = f"https://example.invalid/erase/{segment}/{revision}/model.onnx"
+    with pytest.raises(RegistryError) as refused:
+        entry_from_mapping(_with("source", source), "example.toml")
+    assert revision in str(refused.value)
+    assert "example.toml" in str(refused.value)
+
+
+def test_a_revision_named_by_a_query_key_is_read_too() -> None:
+    """Where the path does not carry it, the query does, and it is read there."""
+    with pytest.raises(RegistryError) as refused:
+        entry_from_mapping(
+            _with("source", "https://example.invalid/download?ref=main"), "example.toml"
+        )
+    assert "main" in str(refused.value)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "https://example.invalid/example/model.onnx",
+        "https://example.invalid/example/model.onnx?download=true",
+        "https://example.invalid/resolve",
+    ],
+)
+def test_a_source_whose_form_names_no_revision_is_left_alone(source: str) -> None:
+    """A URL this registry cannot read a revision out of is not guessed at.
+
+    Including the last one, where the marker segment is the end of the path and
+    nothing follows it. Refusing these would be refusing every source that is a
+    plain file on a host, and what pins the bytes there is the digest.
+    """
+    assert entry_from_mapping(_with("source", source), "example.toml").source == source
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (f"https://example.invalid/erase/resolve/{_COMMIT}/model.onnx", _COMMIT),
+        ("https://example.invalid/erase/blob/main/model.onnx", "main"),
+        (
+            "https://example.invalid/erase/resolve/refs%2Fheads%2Fmain/m",
+            "refs/heads/main",
+        ),
+        ("https://example.invalid/download?rev=main", "main"),
+        ("https://example.invalid/download?file=m.onnx", None),
+        ("https://example.invalid/erase/model.onnx", None),
+    ],
+)
+def test_the_revision_a_source_names_is_readable_on_its_own(
+    source: str, expected: str | None
+) -> None:
+    """The reader an operator's comparison is built on, asked directly.
+
+    It is separate from the refusal because #44's reporting half needs the
+    revision an entry pins rather than a verdict on it, and a reader that only
+    existed inside the refusal would be written a second time there.
+    """
+    assert pinned_revision(source) == expected
+
+
+def test_every_shipped_entry_pins_an_immutable_reference(
+    shipped_registry: Mapping[str, ModelEntry],
+) -> None:
+    """No entry in this tree names a reference that can move under its digest.
+
+    Today this is an assertion over an empty set, for the reason the load test
+    below gives, and it is written so that it becomes load-bearing on the day a
+    file appears in that directory rather than being remembered then. The
+    loader refuses such an entry, so a moving reference cannot reach the
+    directory this reads; asserting it here as well is what the issue asks for
+    and it is the line that would survive the loader being widened.
+    """
+    for entry in shipped_registry.values():
+        revision = pinned_revision(entry.source)
+        assert revision is None or re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", revision)
 
 
 @pytest.mark.parametrize(

@@ -16,10 +16,23 @@ come out of that is a pass.
 
 Written in Python rather than in a shell pipeline because the classification is
 the part that has to be right, and this is the language the repository already
-reads, formats and types. It takes its input from a file and prints its verdict,
-so it runs against a fixture on a workstation exactly as it runs on a runner.
+reads, formats and types. `verdict` takes a path and prints its result, so it
+runs against a fixture on a workstation exactly as it runs on a runner.
 
-    python .github/scripts/code_scanning_gate.py <path to sarif>
+    python .github/scripts/code_scanning_gate.py
+
+The command takes no argument and `SARIF` below is the only path it reads. It
+was written taking one, and the first analysis this gate ever completed refused
+this file for it: `py/path-injection` twice, at the two lines where a value from
+`sys.argv` reached the filesystem, in run 31302655661. Under the `local` threat
+model a command-line argument is untrusted, and the step that decides whether a
+merge is refused is a poor place to accept a path from whoever calls it. A
+fixture reaches `verdict` directly instead, from a driver outside this tree, so
+nothing in here turns a value chosen at run time into a file to read.
+
+`SARIF` is the reading half of a path the analysis step writes as `output:` in
+`.github/workflows/code-scanning.yml`. Two places hold it, nothing compares
+them, and a change to either is a change to both.
 
 Exit 0 means nothing actionable was found. Exit 1 means something was, or that
 the file could not be judged.
@@ -30,12 +43,15 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 SECURITY = "security"
 UNRESOLVED = "unresolved"
 OTHER = "other"
 ACTIONABLE = frozenset({SECURITY, UNRESOLVED})
+
+SARIF: Final = Path("sarif-results") / "python.sarif"
+"""Where the analysis step writes what this reads, relative to the checkout."""
 
 
 def _say(line: str) -> None:
@@ -104,12 +120,13 @@ def judge(document: dict[str, Any]) -> list[list[str]]:
     return rows
 
 
-def main(argv: list[str]) -> int:
-    if len(argv) != 2:
-        _say("::error::usage: code_scanning_gate.py <path to sarif>")
-        return 1
+def verdict(path: Path) -> int:
+    """The verdict for one SARIF file, with every line it prints.
 
-    path = Path(argv[1])
+    Given the path rather than reading `SARIF` itself, because this is the
+    function a fixture drives and a fixture has no `sarif-results` directory.
+    `main` is what supplies the constant, and it is the only caller that does.
+    """
     if not path.is_file():
         _say(
             f"::error::No SARIF at {path}, so this run judged nothing. "
@@ -144,5 +161,10 @@ def main(argv: list[str]) -> int:
     return 0
 
 
+def main() -> int:
+    """The workflow's entry point. Reads the one path this gate ever reads."""
+    return verdict(SARIF)
+
+
 if __name__ == "__main__":
-    raise SystemExit(main(sys.argv))
+    raise SystemExit(main())

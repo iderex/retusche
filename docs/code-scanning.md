@@ -36,6 +36,14 @@ the run that produced the false positive, or a `query-filters` entry naming the
 rule and the reason. Dismissing it in the code-scanning tab and leaving this
 paragraph as it stands would be neither.
 
+Two results have arrived and neither retired it. Both were `py/path-injection`
+against this gate's own module, and the repair was the code, described under
+"Where the verdict is made" below. Worth recording because the two repairs this
+paragraph offers were both wrong for it: a threshold clearing a 7.5 result would
+clear most of what this query set finds, and a `query-filters` entry dropping
+`py/path-injection` would switch off the one query this project will most need
+once results are written to paths built from a job identifier.
+
 A result whose rule metadata cannot be resolved in the SARIF is treated as
 actionable as well. Its tags cannot be read, so it cannot be shown to be
 harmless, and a gate that cannot judge fails rather than passes. The same holds
@@ -45,15 +53,29 @@ run.
 ## Where the verdict is made
 
 `.github/scripts/code_scanning_gate.py`, called by the last step of the
-workflow with the path to the SARIF the analysis wrote. It exits zero when
-nothing is actionable and non-zero otherwise, and it prints one line per
-actionable result: class, rule, security severity, location, message.
+workflow with no argument. It exits zero when nothing is actionable and
+non-zero otherwise, and it prints one line per actionable result: class, rule,
+security severity, location, message.
 
 It is a module rather than a shell pipeline because it is the part that has to
-be right, and because it takes a file and prints a verdict, so it runs against
-a fixture on a workstation exactly as it runs on a runner. That is the only way
-the refusing path of this gate can be watched without waiting for a real
-finding to appear in real code.
+be right, and because `verdict` takes a file and prints a verdict, so it runs
+against a fixture on a workstation exactly as it runs on a runner. That is the
+only way the refusing path of this gate can be watched without waiting for a
+real finding to appear in real code.
+
+The path it reads is a constant in the module rather than an argument, and the
+reason is the first thing this gate ever refused. It took the path on the
+command line, and the first analysis that completed reported `py/path-injection`
+against the two lines where that value reached the filesystem. Under the local
+threat model below, a command-line argument is untrusted, and the step deciding
+whether a merge is refused is a poor place to accept a path from whoever calls
+it. The fixtures reach `verdict` directly instead, from a driver kept outside
+this tree so that the driver's own `sys.argv` does not become the finding.
+
+That leaves the path written in two places, `output:` in the workflow and
+`SARIF` in the module, with nothing comparing them. A comment at each names the
+other. If they ever disagree the gate reads a file that is not there, which is
+one of the states it fails closed on, so the failure is loud rather than a pass.
 
 Two limits of that arrangement, both worth stating rather than discovering.
 mypy's scope is `src`, declared in `pyproject.toml`, so this module is linted

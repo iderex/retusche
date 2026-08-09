@@ -3,19 +3,30 @@
 
 """The job model: where a job can be, how it moves, and where that is kept.
 
-Two modules and one rule between them. `retusche.queue.states` declares the
+Three modules and one rule between them. `retusche.queue.states` declares the
 states, every move that exists and the reason each terminal state carries.
 `retusche.queue.store` makes a move durable, and it asks that table rather than
 deciding for itself, so there is one answer to what a job may do and not one per
-caller.
+caller. `retusche.queue.budget` decides whether a job fits in the device memory
+the operator allowed, and refuses it before a lane is spent on it.
 
-This package holds no admission, no ordering and no lane. Those are #27, #28 and
-#30, and each of them moves a job through the table here rather than adding
-states of its own.
+This package holds no ordering and no lane. Those are #28 and #27, and each of
+them moves a job through the table here rather than adding states of its own.
+The budget module is the same: it names a refusal the table already declares a
+reason for, and writes nothing.
 """
 
 from __future__ import annotations
 
+from retusche.queue.budget import (
+    BudgetError,
+    DeviceMemoryBudget,
+    EstimationDefect,
+    InvalidBudgetError,
+    OverBudgetError,
+    check_fits,
+    estimation_defect,
+)
 from retusche.queue.states import (
     LEGAL_TRANSITIONS,
     REASONS,
@@ -41,17 +52,24 @@ __all__ = [
     "LEGAL_TRANSITIONS",
     "REASONS",
     "TERMINAL_STATES",
+    "BudgetError",
     "CorruptJobStoreError",
+    "DeviceMemoryBudget",
     "DuplicateJobError",
+    "EstimationDefect",
     "IllegalTransitionError",
+    "InvalidBudgetError",
     "JobRecord",
     "JobState",
     "JobStateError",
     "JobStore",
     "JobStoreError",
+    "OverBudgetError",
     "TerminalReason",
     "TerminalReasonError",
     "UnknownJobError",
+    "check_fits",
     "check_transition",
+    "estimation_defect",
     "reason_problem",
 ]

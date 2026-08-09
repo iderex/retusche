@@ -17,19 +17,29 @@ what the setting does, because a name and a type describe the field and not the
 decision. The default is written as an operator would write it, or is absent,
 and absent means the service refuses to start without it.
 
-WHAT IS DECLARED HERE TODAY IS TWO SETTINGS, and that is the tree rather than
+WHAT IS DECLARED HERE TODAY IS THREE SETTINGS, and that is the tree rather than
 the plan. A setting belongs to the issue that builds the thing it controls: the
-device is #22, the memory budget is #30, the queue depth is #34, the retention
-period is #36, the log level is #64 and the library address is #56. Declaring
-any of them here would answer those issues by side effect, and each of them
-arrives as one row in the tuple below.
+device is #22, the queue depth is #34, the retention period is #36, the log
+level is #64 and the library address is #56. Declaring any of them here would
+answer those issues by side effect, and each of them arrives as one row in the
+tuple below.
 
-The two that are here are the two the tree can already be pointed at: the job
-store, which `retusche.queue.store` opens, and the model registry, which
-`retusche.models.registry` reads. Neither has a default, and that is the
-argument rather than an omission: a default path writes somebody's job records
-or looks for their weights wherever the process happened to be started, and
-being wrong there is silent.
+The three that are here are the three the tree can already be pointed at: the
+job store, which `retusche.queue.store` opens, the model registry, which
+`retusche.models.registry` reads, and the device memory budget, which
+`retusche.queue.budget` compares an estimate against.
+
+The two paths have no default, and that is the argument rather than an
+omission: a default path writes somebody's job records or looks for their
+weights wherever the process happened to be started, and being wrong there is
+silent. The budget has one, and it is the opposite case: being wrong there is
+loud in one direction and silent in the other. A default set too high hands out
+memory the operator meant to keep for the photo library, and nothing says so
+until something else on the card fails to allocate. A default set too low
+refuses a job with a sentence naming both numbers. So the default is chosen on
+the side that announces itself, and it is a choice rather than a measurement:
+nothing in this tree has measured what any engine needs, and #85 is where the
+first such number comes from.
 """
 
 from __future__ import annotations
@@ -133,6 +143,26 @@ SETTINGS: Final = (
             "declared there, licence included, and a directory that is not the "
             "intended one offers a different set without saying so."
         ),
+    ),
+    Setting(
+        name="device_memory_budget_bytes",
+        kind=Kind.INTEGER,
+        unit="bytes of device memory",
+        summary=(
+            "The most device memory this project will hold at once, weights "
+            "that stay resident included. It is a ceiling the operator sets "
+            "and not an amount read off the card, because the card is usually "
+            "shared with a photo library, a transcoder or a desktop session, "
+            "and taking what looks free breaks the thing this service was "
+            "meant to sit politely beside. A job whose estimate does not fit "
+            "in what is left is refused before it reaches the device, with "
+            "both numbers named. The default is four gibibytes and it is a "
+            "choice rather than a measurement: nothing here has yet measured "
+            "what an engine needs, so it is set on the side that refuses "
+            "loudly rather than the side that quietly takes somebody else's "
+            "memory."
+        ),
+        default="4294967296",
     ),
 )
 """The declared surface. Nothing reads a setting that is not in here."""

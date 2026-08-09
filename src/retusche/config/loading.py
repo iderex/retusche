@@ -48,6 +48,7 @@ import tomllib
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
+from retusche.config.secret import REDACTED, Secret
 from retusche.config.settings import (
     ENVIRONMENT_PREFIX,
     SETTINGS,
@@ -60,17 +61,18 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
 __all__ = [
-    "REDACTED",
     "Configuration",
     "ConfigurationError",
     "load",
 ]
 
-REDACTED = "<redacted>"
-"""What a secret reads as everywhere a configuration is rendered."""
+Value = str | int | bool | Path | Secret
+"""What a parsed setting holds, one type per kind.
 
-Value = str | int | bool | Path
-"""What a parsed setting holds. `Path` for a path, `str` for text and secrets."""
+A secret is a `Secret` rather than a string, so a value declared as one cannot
+be handed to a caller as something an f-string prints. `retusche.config.secret`
+is where that type and its limits are.
+"""
 
 
 class ConfigurationError(Exception):
@@ -92,8 +94,19 @@ class Configuration:
         self._settings = {setting.name: setting for setting in settings}
 
     def text(self, name: str) -> str:
-        """The value of a text or secret setting."""
-        return cast("str", self._checked(name, (Kind.TEXT, Kind.SECRET)))
+        """The value of a text setting.
+
+        A secret is refused here rather than served, and that refusal is the
+        change this accessor exists to carry. It answered for both kinds once,
+        which handed a credential to a caller as an ordinary string with nothing
+        on it: the next format string printed it, and neither the declaration
+        nor the loader was wrong at any point along the way.
+        """
+        return cast("str", self._checked(name, (Kind.TEXT,)))
+
+    def secret(self, name: str) -> Secret:
+        """The value of a secret setting, in a type that does not print itself."""
+        return cast("Secret", self._checked(name, (Kind.SECRET,)))
 
     def integer(self, name: str) -> int:
         """The value of an integer setting."""
@@ -113,6 +126,11 @@ class Configuration:
         Redaction is decided by the kind in the declaration and never by the
         caller, so a setting that becomes a secret later is redacted everywhere
         at once rather than everywhere somebody remembered.
+
+        Two mechanisms cover this one rendering and that is deliberate. The kind
+        is read here, and the value is a `Secret` that renders as `REDACTED`
+        whichever branch reaches it. The second is what covers the rendering
+        somebody writes next, which will not have this check in it.
         """
         return tuple(
             f"{setting.name} = {REDACTED}"
@@ -259,6 +277,8 @@ def _coerce(setting: Setting, written: object) -> Value:
         raise _refused(setting, written, "a string")
     if setting.kind is Kind.PATH:
         return Path(written)
+    if setting.kind is Kind.SECRET:
+        return Secret(written)
     return written
 
 
@@ -288,7 +308,16 @@ def _is_whole_number(written: str) -> bool:
 
 
 def _refused(setting: Setting, written: object, wanted: str) -> ConfigurationError:
+    """The refusal, quoting what was written unless the setting is a secret.
+
+    A refusal is the one place a value is printed before anything has decided
+    what it is, so it is where a credential written in the wrong shape reaches a
+    log. The `Secret` type cannot cover this: the value is still whatever came
+    out of the file at this point, and the coercion that would have wrapped it
+    is the thing that just failed.
+    """
+    shown = REDACTED if setting.kind is Kind.SECRET else repr(written)
     return ConfigurationError(
-        f"{setting.name} is {written!r}, and this setting is {wanted}. It is "
+        f"{setting.name} is {shown}, and this setting is {wanted}. It is "
         f"measured in {setting.unit}."
     )

@@ -5,9 +5,10 @@
 
 `retusche.config.settings` is where every setting is declared and is the only
 place one may be. `retusche.config.loading` reads the three sources and refuses
-the whole configuration at once. `retusche.config.reference` writes the operator
-reference page from the declaration, so the page cannot describe a surface that
-has moved.
+the whole configuration at once. `retusche.config.secret` holds the type a value
+declared as a secret is handed over in, which renders as `REDACTED` however it
+is formatted. `retusche.config.reference` writes the operator reference page
+from the declaration, so the page cannot describe a surface that has moved.
 
 Nothing here reads a file or the process environment on its own. The loader is
 handed the text and the mapping, because the entry point that would fetch them
@@ -18,12 +19,12 @@ cannot exercise without arranging the host.
 from __future__ import annotations
 
 from retusche.config.loading import (
-    REDACTED,
     Configuration,
     ConfigurationError,
     load,
 )
 from retusche.config.reference import reference_markdown
+from retusche.config.secret import REDACTED, Secret
 from retusche.config.settings import (
     ENVIRONMENT_PREFIX,
     SETTINGS,
@@ -39,6 +40,7 @@ __all__ = [
     "Configuration",
     "ConfigurationError",
     "Kind",
+    "Secret",
     "Setting",
     "environment_name",
     "load",

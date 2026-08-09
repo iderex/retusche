@@ -221,9 +221,9 @@ thing it describes. The checks a change actually has to pass are printed by:
 
     gh pr checks <number>
 
-Four of them have a local equivalent today, and the name is written here beside
-the command because a name you cannot reproduce locally is a name you can only
-argue with after a red run.
+Four of them have a local equivalent today and a fifth has one for half of what
+it does, and each name is written here beside the command because a name you
+cannot reproduce locally is a name you can only argue with after a red run.
 
 `type-check` is reproduced by `uv run mypy` plus the two suppression scans in
 `.github/workflows/pull-request.yml`. `lint` is reproduced by
@@ -234,7 +234,17 @@ reproduced by the scan in the table above together with
 
     git ls-files --eol | grep -E '^i/(crlf|mixed)'
 
-and unlike the other two it needs nothing installed.
+and unlike the others it needs nothing installed.
+
+`Code scanning (CodeQL)` is the fifth, and only its verdict has a local form.
+That verdict is `.github/scripts/code_scanning_gate.py`, which reads
+`sarif-results/python.sarif` and exits non-zero on an actionable finding, so
+you can run it here against any SARIF you already hold. What you cannot run
+here is the analysis that writes one: it is the CodeQL bundle the job
+downloads, and this repository carries no copy of it. So the half that decides
+is reproducible and the half that finds is not.
+`docs/code-scanning.md` says what counts as actionable and what the gate does
+not see.
 
 The rest read the pull request itself, the workflow files or the advisory
 database, and have no local form.

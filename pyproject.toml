@@ -28,7 +28,18 @@ worker = []
 # Tooling the gates run. Pinned exactly: a checker that moves under a range
 # decides different things about unchanged code on different days, and a
 # formatter that moves under one rewrites files nobody touched.
-dev = ["mypy==2.3.0", "ruff==0.16.1"]
+#
+# coverage is pinned here as well as arriving under pytest-cov. The floor below
+# is a number one of these versions produced, and a coverage that moved under
+# pytest-cov's range would move the number without anything in this file
+# changing.
+dev = [
+    "coverage==7.15.3",
+    "mypy==2.3.0",
+    "pytest==9.1.1",
+    "pytest-cov==7.1.0",
+    "ruff==0.16.1",
+]
 
 [project.urls]
 Homepage = "https://github.com/iderex/retusche"
@@ -43,6 +54,156 @@ packages = [
     "src/retusche",
     "src/retusche_contracts",
     "src/retusche_worker",
+]
+
+# Kept out of the artefact an operator installs. `retusche.testing` holds an
+# implementation of the engine contract that reaches no device and produces
+# derived noise, which is what the suite needs and what nothing outside it has a
+# use for. A test double reachable from an installed service is a thing somebody
+# eventually selects by accident, and the accident is silent: the jobs succeed.
+#
+# The path is anchored with a leading slash so it names this directory and not
+# any `testing` further down. `tests/test_packaging.py` says what the check over
+# this line does and does not establish.
+exclude = ["/src/retusche/testing"]
+
+[tool.retusche]
+# This project's own data, read by the suite rather than restated inside it.
+
+[tool.retusche.import-boundary]
+# Top-level module names that stand for a machine-learning runtime or a model
+# library. Module roots and not distribution names, because what an import
+# statement carries is a module name and the distribution behind it is not
+# visible where the rule has to decide.
+#
+# Two rules read this list. Test discovery refuses a unit test that imports any
+# of them while the module executes, and the import-graph test refuses an
+# orchestration module that reaches one at any depth.
+#
+# Not on the list, deliberately: Pillow and numpy. Neither is a machine-learning
+# runtime, decoding what arrives from a stranger is the orchestration layer's own
+# work, and a list that grows to mean "heavy" stops meaning anything.
+forbidden-roots = [
+    "accelerate",
+    "bitsandbytes",
+    "diffusers",
+    "flax",
+    "jax",
+    "jaxlib",
+    "keras",
+    "onnx",
+    "onnxruntime",
+    "peft",
+    "safetensors",
+    "sentencepiece",
+    "tensorflow",
+    "timm",
+    "tokenizers",
+    "torch",
+    "torchaudio",
+    "torchvision",
+    "transformers",
+    "triton",
+    "xformers",
+]
+
+# The packages that must stay importable in the process that accepts HTTP, and
+# so the only ones of this project's own packages an orchestration module may
+# reach. Everything else under src/ is out of bounds for that process, derived
+# from the tree rather than listed here, so a package arriving later is outside
+# the boundary until somebody decides otherwise.
+#
+# retusche is the orchestration layer. retusche_contracts is the engine
+# interface, which is declarations and standard-library types and is what the
+# orchestration layer is meant to talk to the worker through.
+socket-safe-roots = ["retusche", "retusche_contracts"]
+
+# Where the import-graph walk starts. Everything socket-safe is judged whether
+# or not the walk reaches it, and this only decides which module a reported
+# chain begins at.
+entry-point = "retusche"
+
+[tool.retusche.layer-imports]
+# Each package under src/ and the packages of this project it may reach, itself
+# included. Read by tests/conformance/, which walks the import graph from each row
+# and refuses a chain that leaves that row's set, at any depth and function bodies
+# included.
+#
+# The orchestration layer has no row here. Its set is socket-safe-roots above,
+# which the boundary rule reads, and a copy of it here would be two lists for one
+# property with nothing refusing a divergence between them. The conformance suite
+# refuses a package under src/ that is in neither place, so a package arriving
+# tomorrow is judged by one of the two rather than by neither.
+#
+# Runtime roots are not repeated either. forbidden-roots above is refused to the
+# socket-safe packages by the boundary rule and is permitted to the worker by the
+# layout, so what these rows decide is this project's own edges and nothing else.
+#
+# The worker may reach the contract and not the orchestrator: a worker that
+# reaches back into the orchestrator turns two operating-system processes into one
+# program split across a pipe, and the process boundary exists so the queue
+# survives a native crash. The contract may reach neither of its users: a contract
+# that imports one of them makes the other's dependency on the contract a
+# dependency on that user.
+retusche_worker = ["retusche_worker", "retusche_contracts"]
+retusche_contracts = ["retusche_contracts"]
+
+[tool.retusche.coverage-exclusions]
+# A package under src/ that coverage does not measure, and why. The suite prints
+# every entry at the end of a run: a report that simply left the package out
+# would read exactly like a report where it was measured and found complete.
+#
+# The suite refuses to start if a package under src/ is in neither this table nor
+# [tool.coverage.run] source, so a new package cannot arrive without a decision.
+retusche_worker = "the engine worker, the one package permitted a machine-learning runtime. No unit test loads it, so a coverage number over it would describe code this suite deliberately never runs. Its own harness is the hardware one."
+
+[tool.pytest.ini_options]
+minversion = "9.1"
+testpaths = ["tests"]
+
+# --cov with no value measures what [tool.coverage.run] source names, so the
+# scope is stated once and the command line carries no rule of its own. The
+# floor is in [tool.coverage.report] for the same reason.
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--cov",
+    "--cov-report=term-missing",
+]
+
+# A warning is a finding. This suite has no legacy to grandfather, so the day
+# a dependency starts deprecating something is the day it is dealt with rather
+# than the day it scrolls past.
+filterwarnings = ["error"]
+
+# An xfail that passes is a test whose reason no longer holds. Strict makes that
+# a failure instead of a green line nobody reads.
+xfail_strict = true
+
+[tool.coverage.run]
+# Named as paths rather than as packages so the entry is wrong in a way that can
+# be seen. The suite checks these against what is actually under src/.
+source = ["src/retusche", "src/retusche_contracts"]
+
+# Branch coverage, not only line coverage. A guard whose false arm is never
+# taken is a guard nothing has proven, and line coverage calls it covered.
+branch = true
+
+[tool.coverage.report]
+# The floor. It is what the tree measures today rather than a round number
+# chosen to leave room: a floor below the measurement is a floor a change can
+# walk under while staying green, which is the thing this is for. CONTRIBUTING.md
+# carries the command that produces it.
+fail_under = 100
+show_missing = true
+skip_covered = false
+
+exclude_also = [
+    # A Protocol method body. The `def` line runs when the class is built; the
+    # ellipsis under it never runs anywhere, so counting it as missed would mean
+    # lowering the floor to accommodate a line that cannot be reached.
+    "^\\s*\\.\\.\\.$",
 ]
 
 [tool.ruff]
@@ -95,8 +256,7 @@ select = [
 
 [tool.ruff.lint.per-file-ignores]
 # A test asserts. S101 refuses `assert` because it vanishes under `python -O`,
-# which is true of shipped code and beside the point in a suite. The directory
-# arrives with #5.
+# which is true of shipped code and beside the point in a suite.
 "tests/**" = ["S101"]
 
 # N818 wants every exception class to end in `Error`. The engine contract names

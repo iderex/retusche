@@ -30,6 +30,7 @@ In the order they should be run.
 | Formatting is already what it would be | `uv run ruff format --check` |
 | Lint | `uv run ruff check` |
 | Type check, strict | `uv run mypy` |
+| Tests, with the coverage floor | `uv run pytest` |
 | No carriage return in tracked text | `git grep -nIP '\r' HEAD -- .` |
 
 `uv lock --check` names the repair rather than performing it: it prints
@@ -38,11 +39,6 @@ In the order they should be run.
 The line-ending scan prints the offending file and line, and prints nothing on
 a clean tree. It reads blobs at `HEAD`, not files on disk, which is why it is
 the same command everywhere; the section below says what that buys.
-
-One gate is missing from that table and its absence is not an oversight. There
-is no test command and no coverage floor, which is issue #5. Until it lands,
-running everything in this table is not the same as running everything a change
-has to pass, and this file will say so until the row exists.
 
 `uv run ruff format` is the repair and `--check` is the verdict, and they are
 the same binary resolved from the same lock file, so the gate and the repair
@@ -54,6 +50,127 @@ The formatter reaches python inside markdown as well as python in a `.py` file,
 so a fenced code block in a document is formatted like the code it shows. An
 indented block is not, because it is not fenced and nothing declares its
 language.
+
+## The suite and the coverage floor
+
+One command, and it carries no options:
+
+    uv run pytest
+
+The test paths, the coverage scope and the floor are all in `pyproject.toml`, so
+this command on a laptop judges the tree exactly as the `test` job does. A
+`--cov` flag on a command line would be a measurement that exists only where that
+line is typed.
+
+The floor is 100, and this is the run it comes from, on Windows, which is why
+the paths read with backslashes:
+
+    $ uv run pytest
+    ...
+    Name                                 Stmts   Miss Branch BrPart  Cover   Missing
+    --------------------------------------------------------------------------------
+    src\retusche\__init__.py                 2      0      0      0   100%
+    src\retusche_contracts\__init__.py       2      0      0      0   100%
+    src\retusche_contracts\engine.py        77      0      0      0   100%
+    --------------------------------------------------------------------------------
+    TOTAL                                   81      0      0      0   100%
+    Required test coverage of 100.0% reached. Total coverage: 100.00%
+    49 passed
+
+That is the floor because it is the measurement. A floor set below what the tree
+already reaches is room a change can walk into while the gate stays green, which
+is the thing the floor exists to refuse. It is a number about two packages that
+today hold declarations and no behaviour, so it says less than it will once there
+is behaviour to miss; what it does say is that nothing arrives uncovered from
+here on. Lowering it is a change with a reason in its pull-request body, not a
+number edited on the way past.
+
+Coverage is measured over the orchestration packages. The worker is not measured,
+and the run prints that along with the reason rather than leaving it out, because
+a report that quietly omits a package reads the same as one where the package was
+measured and found complete. Both lists live in `pyproject.toml`, and the suite
+refuses to start if a package under `src/` is in neither: a package cannot arrive
+without somebody deciding which side of the line it is on.
+
+Two rules bind the suite itself.
+
+Every test runs with no display, no elevation and no GPU. The `test` job prints
+what the runner actually had before it runs anything, so that is a fact from the
+run rather than a claim made here. Nothing yet refuses a test that quietly needs
+one of the three; that is issue #84.
+
+A test may not import a machine-learning runtime while its module executes. Such
+a test wants weights, a device and a driver, and it belongs in the hardware
+harness where it is skipped by name. The rule is applied at discovery, before the
+file is imported, so what you get is a message naming the file, the line and the
+module rather than an import error from somewhere inside the interpreter. The
+refused module roots are `[tool.retusche.import-boundary]` in `pyproject.toml`,
+and a class body or an `if TYPE_CHECKING:` block counts as module level, because
+those are where such an import gets written when somebody wants it to look
+conditional.
+
+## The import boundary
+
+The process that accepts HTTP does not import a machine-learning runtime, a
+model library, or the worker package. A crash or an out-of-memory kill inside a
+native tensor library takes the whole process down with it, and the queue has to
+survive that. The dependency surface reachable from a socket is also as small as
+the work allows, which it is not if it transitively includes a deep-learning
+framework.
+
+`tests/test_import_boundary.py` holds it. The test walks the import graph of
+`src/` statically and fails with the chain it found, so a run tells you which
+edge to cut rather than that something somewhere crosses the line:
+
+    retusche -> retusche.jobs -> retusche.render -> torch
+
+Which roots are refused, which of this project's own packages the socket process
+may reach, and where the walk starts are all
+`[tool.retusche.import-boundary]` in `pyproject.toml`. A package arriving under
+`src/` is outside the boundary until it is added to `socket-safe-roots`, so the
+default is the closed one.
+
+Two differences from the discovery rule above, both deliberate. This walk reads
+imports at any depth, function bodies included, because a deferred import is how
+a heavy dependency arrives in a process somebody meant to keep small. And it
+reads the tree rather than importing it, so it judges a module no runtime path
+has reached yet and needs none of the refused packages installed to say that
+something reaches them.
+
+What it cannot see is written in the test's own docstring rather than here: a
+module loaded through `importlib` or a name assembled at runtime, a subprocess,
+and anything a third-party package imports once the chain leaves `src/`. Work
+that needs the runtime goes behind the engine interface in `retusche_contracts`
+and runs in the worker process. Running the worker in a process of its own and
+supervising it is issue #17.
+
+## A new engine is not complete until the contract suite runs against it
+
+`tests/contract/` holds the clauses every engine is held to: what a capability
+declaration promises and whether it holds still, what an estimate may cost, what
+a mask of zeroes means, what a mask covering everything means, what progress
+reports, what cancelling does before the first step and during the run, and what
+a request outside the declaration gets. The clauses are written against the
+interface and against no engine, and they run once per entry in
+`tests/contract/engine_register.py`.
+
+An engine absent from that register has been held to none of it. Adding one is
+one entry: the name the engine declares as its `engine_id`, how to build a fresh
+instance, and the largest per-channel difference it may show on a pixel its mask
+left at zero. That last number is the only thing an entry states that the
+engine's own declaration does not, and it is there so a diffusion engine can be
+registered without the clause being loosened for the engines that do copy those
+pixels.
+
+An engine needing a device is registered in the hardware harness rather than
+here, under the same clause bodies so the two cannot drift. That harness is
+issue #85 and is not in the tree, so today the register holds one entry and what
+the suite establishes is that the clauses are executable and that the fake meets
+them, not that two engines agree.
+
+`tests/contract/test_the_suite_bites.py` runs each clause against an engine
+built to break exactly that clause. A clause added without an entry there is a
+clause nothing has shown can fail.
 
 ## Line endings and exact bytes
 
@@ -104,15 +221,16 @@ thing it describes. The checks a change actually has to pass are printed by:
 
     gh pr checks <number>
 
-Three of them have a local equivalent today, and the name is written here beside
+Four of them have a local equivalent today, and the name is written here beside
 the command because a name you cannot reproduce locally is a name you can only
 argue with after a red run.
 
 `type-check` is reproduced by `uv run mypy` plus the two suppression scans in
 `.github/workflows/pull-request.yml`. `lint` is reproduced by
 `uv run ruff format --check` followed by `uv run ruff check`, in that order,
-which is the order the job runs them. `line-endings` is reproduced by the scan
-in the table above together with
+which is the order the job runs them. `test` is reproduced by `uv run pytest`
+exactly, options included, which is why the job passes none. `line-endings` is
+reproduced by the scan in the table above together with
 
     git ls-files --eol | grep -E '^i/(crlf|mixed)'
 
@@ -143,11 +261,46 @@ changes has a message describing one of them.
 State what changed and what failure the change prevents. Where you are
 correcting something, say what was wrong and how it was found.
 
+## What you grant, and how you say it
+
+This project is under the GNU Affero General Public License version 3, only.
+`LICENSE` holds the text, `[project] license` in `pyproject.toml` holds the
+identifier, and the first two lines of every Python file in the tree repeat it,
+so a file read a long way from this repository still carries its terms. The
+suite refuses a file without those two lines, and refuses one whose identifier
+disagrees with the project file, with a different message for each.
+
+    # Copyright (C) 2026 Your Name
+    # SPDX-License-Identifier: AGPL-3.0-only
+
+The copyright line names you. Nothing here asks you to assign or reassign it,
+and there is no contributor licence agreement: what you write stays yours, and
+it is offered under the licence above like everything else in the tree. Where
+you are contributing on behalf of an employer, the name on that line is the one
+that holds the copyright, which may not be yours.
+
+The rule reads every Python file in the tree and not only the ones your branch
+changed, which is worth knowing while several branches are open. A branch that
+adds a file without the header is green as long as the rule is not in its base,
+and a branch that adds the rule is green as long as that file is not in its
+base; the tree where both exist is the merged one, and no check in this
+repository answers on that tree. It happened once, at issue #117. If your branch
+has been open a while, merge the default branch into it and run the suite before
+merging rather than after.
+
+The walk covers this repository's own directories and skips anything under a
+dot-prefixed one, so a Python file under `.github/` carries no header and is not
+asked for one. That is the shape of the walk rather than a decision about those
+files.
+
 ## Sign your work
 
 Every commit carries a `Signed-off-by` trailer matching its author. By adding
 it you certify the [Developer Certificate of Origin](DCO), which is the file
-the sign-off gate names.
+the sign-off gate names. It is a statement about origin, that you wrote the
+change or have the right to submit it under the licence above, and it is not a
+transfer of anything. The two sit together: the trailer says the contribution is
+yours to give, and the header says the terms it is given under.
 
     git commit -s
 

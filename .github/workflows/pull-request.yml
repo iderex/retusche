@@ -1,7 +1,7 @@
 # Gates that run against the project's own code, as opposed to the guards that
-# judge supply chain and workflow hygiene. It holds the type gate and the
-# format-and-lint gate; the test gate joins it under #5, and which of these names
-# has to stand in front of the default branch is #6.
+# judge supply chain and workflow hygiene. It holds the type gate, the
+# format-and-lint gate and the test gate; which of these names has to stand in
+# front of the default branch is #6.
 #
 # No `name:` on the jobs below: the ruleset that guards the default branch
 # matches a required status check by its literal check-run name, which defaults
@@ -131,3 +131,54 @@ jobs:
         # failure: ruff has no severity below error, so there is no warning here
         # that could be passed over.
         run: uv run ruff check --no-fix --output-format=github
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read # checkout only
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # No step pushes, so do not persist the token.
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+
+      - name: Create the environment from the lock file
+        # Same reason as the gates above. Here it also fixes the coverage
+        # version, and the floor is a number a particular coverage produced.
+        run: uv sync --locked
+
+      - name: Say what the runner had
+        # The suite is meant to pass with no GPU driver present. That is a claim
+        # about a machine, so the run prints the machine rather than this file
+        # asserting it. Nothing here refuses anything: turning these facts into a
+        # property the suite refuses a violation of is #84.
+        #
+        # Every branch prints something. A step that printed nothing on the
+        # absent case would read the same as a step that was skipped.
+        run: |
+          set -euo pipefail
+          if command -v nvidia-smi >/dev/null 2>&1; then
+            echo "nvidia-smi: on PATH"
+          else
+            echo "nvidia-smi: not on PATH"
+          fi
+          if compgen -G '/dev/nvidia*' >/dev/null; then
+            echo "device nodes: /dev/nvidia* present"
+          else
+            echo "device nodes: no /dev/nvidia*"
+          fi
+          echo "DISPLAY=${DISPLAY-unset}"
+          echo "WAYLAND_DISPLAY=${WAYLAND_DISPLAY-unset}"
+          echo "effective uid: $(id -u)"
+
+      - name: Run the suite under the coverage floor
+        # No options on this command line. The test paths, the coverage scope and
+        # the floor are all in pyproject.toml, so `uv run pytest` on a laptop
+        # judges the tree exactly as this job does. A --cov flag here would be a
+        # measurement that exists only inside this workflow.
+        run: uv run pytest

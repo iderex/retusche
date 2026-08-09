@@ -93,6 +93,30 @@ share a head commit, so each publishes two check runs under one name. What a
 ruleset does when two runs carry the name it matches has not been measured here,
 and it is worth measuring before either of those two is required.
 
+Both listings above are older than the set they describe. Three names have been
+published since, on a pull-request head at
+`1b157f16a6a26e4277f9fe4d5cd3587a4b19e24c`:
+
+    gh api "repos/iderex/retusche/commits/1b157f16a6a26e4277f9fe4d5cd3587a4b19e24c/check-runs?per_page=100" --jq '.check_runs[] | "\(.name)\t\(.conclusion)"' | sort
+    Audit workflows (zizmor)	success
+    Code scanning (CodeQL)	success
+    CodeQL	success
+    DCO sign-off	success
+    dependency-review	success
+    line-endings	success
+    line-endings	success
+    lint	success
+    Reject Trojan Source Unicode	success
+    Reject Trojan Source Unicode	success
+    test	success
+    type-check	success
+    zizmor	success
+
+`test` arrived with the suite and `Code scanning (CodeQL)` and `CodeQL` with the
+gate in #76. The earlier listings are kept rather than replaced, because the
+entries below cite those heads by sha for their green observations, and a
+listing rewritten under a citation stops being the thing that was cited.
+
 ## What has been observed
 
 Every failing run this repository has recorded, not a sample. The list grows,
@@ -124,6 +148,22 @@ is not a published name here yet. Neither is evidence about a check in the sets
 below, and both are listed because the command above prints them and a listing
 trimmed to what suits the argument is not a listing.
 
+The sentence above is out of date and the correction is the reason this section
+grew. `Code scanning (CodeQL)` is a published name here now, #76 having landed,
+so run `31125864932` is evidence about a check in the sets below rather than
+about one that is not there yet. It was found by comparing the two sets in this
+file against what a pull-request head actually publishes, which is the listing
+in the section before this one and is three names longer than either set.
+Re-running the same command prints two rows that are newer than the paragraph
+above:
+
+    gh api --paginate "repos/iderex/retusche/actions/runs?per_page=100" --jq '.workflow_runs[] | select(.conclusion=="failure") | "\(.name)\t\(.id)\t\(.event)"'
+    Code scanning	31303100857	pull_request
+    Code scanning	31302655661	pull_request
+
+Both are `Code scanning (CodeQL)` read at the job level, and the first is the
+observation its entry below rests on.
+
 A workflow run is not a check name, so a run that holds more than one job is
 read at the job level:
 
@@ -135,12 +175,35 @@ read at the job level:
     type-check	failure
     lint	success
 
-Six published names have been watched refusing something: `lint`,
+Eight published names have been watched refusing something: `lint`,
 `line-endings`, `type-check`, `Reject Trojan Source Unicode`,
-`Audit workflows (zizmor)` and `DCO sign-off`. Each refused a near miss written
-to make it refuse, and each entry below cites the run. Five of the six went
-green again when the fixture came out. The sixth could not, and its entry says
-why. The remaining names have only ever been seen passing.
+`Audit workflows (zizmor)`, `DCO sign-off`, `Code scanning (CodeQL)` and
+`CodeQL`. The count said six until the two code-scanning names were placed in
+the sets below. Each of the eight refused a near miss written to make it refuse,
+and each entry below cites the run. Seven of the eight went green again when the
+fixture came out. The one that could not is `DCO sign-off`, and its entry says
+why.
+
+`test` is a ninth name that has been seen red, and it is not in that list,
+because what went red was not the suite. On run `31224376469` four jobs on one
+head failed together, and the `test` job never reached the step that runs
+anything:
+
+    gh api "repos/iderex/retusche/actions/runs/31224376469/jobs" --jq '.jobs[] | select(.name=="test") | .steps[] | "\(.number)\t\(.name)\t\(.conclusion)"'
+    1	Set up job	success
+    2	Checkout Repository	success
+    3	Install uv	success
+    4	Create the environment from the lock file	failure
+    5	Say what the runner had	skipped
+    6	Run the suite under the coverage floor	skipped
+
+So the environment step refused a lock file that did not match the project file,
+and three other jobs on that head died at the same step for the same reason. A
+red run produced that way says the setup is shared, not that this gate refuses a
+failing test or a coverage floor that has been walked under. Its entry below
+records that, and reading the run list alone would have recorded the opposite.
+
+The remaining names have only ever been seen passing.
 
 Every one of those near misses was refused by its own gate and by no other. On
 the head that carried all three of the most recent ones, the checks that had
@@ -252,6 +315,45 @@ which is exactly where a dependency arrives. Green observed on the same head.
 Red not observed. What would produce it: a dependency with a published advisory
 added to the lock file on a branch, and removed once the run is recorded.
 
+`test`, the job id in `.github/workflows/pull-request.yml`. It is the only check
+here that runs the code rather than reading it, and it carries the coverage
+floor, so it is the one gate a change adding untested behaviour has to get past.
+Green observed on `1b157f16a6a26e4277f9fe4d5cd3587a4b19e24c`. Red observed at
+run `31224376469`, and that observation is not the one this entry needs: the job
+failed at `Create the environment from the lock file` and never ran the suite,
+alongside three other jobs failing at the same step, which is set out in the
+section above. What is still owed is a run where this name refuses a failing
+test or a coverage floor walked under, with the other names on the head green.
+Requiring it before that is requiring a gate whose own refusal path has not been
+watched.
+
+`Code scanning (CodeQL)`, declared in `.github/workflows/code-scanning.yml`.
+It is the only judgement in this tree that reads what the code does with data it
+did not create, which is the question a linter matching call names cannot
+answer, and this service is going to decode image files from strangers. Green
+observed on `1b157f16a6a26e4277f9fe4d5cd3587a4b19e24c`. Red observed at run
+`31303100857`, on head `117b6fb765db722317b607604dd22d13c80c6cbb`, and every
+other check on that head stayed green, which is what makes it evidence about
+this gate rather than evidence that something was wrong:
+
+    gh api "repos/iderex/retusche/commits/117b6fb765db722317b607604dd22d13c80c6cbb/check-runs?per_page=100" --jq '.check_runs[] | "\(.name)\t\(.conclusion)"' | sort
+    Audit workflows (zizmor)	success
+    Code scanning (CodeQL)	failure
+    CodeQL	failure
+    DCO sign-off	success
+    dependency-review	success
+    line-endings	success
+    line-endings	success
+    lint	success
+    Reject Trojan Source Unicode	success
+    Reject Trojan Source Unicode	success
+    test	success
+    type-check	success
+    zizmor	success
+
+The fixture came out in the next commit and the same names are green on
+`d3995e24a52bc49d8978b7a4f77404b9792b3033`.
+
 ## Advisory set
 
 These are not proposed as merge conditions, and the reason is a property of each
@@ -268,6 +370,26 @@ evidence for keeping it advisory: `Audit workflows (zizmor)` refused the near
 miss on `f5a0b07c3e9646e41157dbb5bebcb9318a64d0e6` and `zizmor` reported success
 on the same commit, in the listing above. Requiring this name would have let
 that change through.
+
+`CodeQL`, created by code scanning rather than by a job, from the SARIF the
+analysis uploads under `/language:python`. It is advisory for the reason
+`zizmor` is, one workflow along: the upload step in
+`.github/workflows/code-scanning.yml` is conditional and skipped where the token
+cannot write security events, which is a pull request from a fork and one opened
+by Dependabot, so a required check under this name would be a merge that cannot
+complete on exactly those. The condition is read off the file rather than
+observed, and the absence it describes has not been watched here: no fork or
+Dependabot pull request has yet run against a head carrying that workflow. What
+would show it is the check-run listing on such a head.
+
+One thing separates it from `zizmor`, and it is a reason to keep this entry
+rather than fold it into that one. When `Audit workflows (zizmor)` refused its
+near miss, `zizmor` reported success on the same commit. When
+`Code scanning (CodeQL)` refused its near miss, `CodeQL` failed with it, in the
+listing above. So this name has carried a refusal and that one has not. It is
+still advisory, because a name that is sometimes not published cannot be a merge
+condition however well it judges when it is there. Green observed on
+`1b157f16a6a26e4277f9fe4d5cd3587a4b19e24c`. Red observed at run `31303100857`.
 
 `Scorecard analysis`, declared in `.github/workflows/scorecard.yml`. It is
 triggered by `branch_protection_rule`, by a schedule and by a push to the default
@@ -343,8 +465,10 @@ because the job that produces it is declared here rather than there.
 
 `Analyze (csharp)`. Replaced by the same entry. It is CodeQL's per-language job
 name rather than a second control, and that ruleset lists both because both
-names are published. Whether this project ends up publishing one name or two is
-#76's to answer and #86's to require.
+names are published. Whether this project ends up publishing one name or two was
+left to #76 here, and #76 has answered it: two, `Code scanning (CodeQL)` from
+the job and `CodeQL` from the upload, split across the two sets above for the
+reason each entry gives.
 
 `DCO sign-off`. Matched, under the same name, declared in
 `.github/workflows/dco.yml`. It is already in the tree. Making it a condition of

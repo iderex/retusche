@@ -131,15 +131,43 @@ in that directory's own modules and in the project file rather than repeated
 here. `tests/conformance/test_the_layer_rules_bite.py` is where each refusal is
 shown to happen against a tree built to break exactly that rule.
 
+## Which engines the contract holds
+
+`tests/contract/` holds the clauses every engine is held to, and they run once
+per entry in `tests/contract/engine_register.py`. An engine absent from that
+register has been held to none of them, and the run prints the same green as one
+where it passed. The register is a list somebody maintains, so the way an engine
+leaves the contract is an omission rather than an edit: nothing is misspelled,
+no type changes, and every gate in this tree was content with it.
+
+`tests/conformance/test_every_engine_is_held_to_the_contract.py` refuses that in
+both directions. A class under `src/` that answers the whole engine interface
+and is not in the register, and a register entry that is not such a class,
+because a method renamed on an implementation takes the clauses that do not call
+it along quietly. What counts as answering the interface is read off the
+declaration in `retusche_contracts` rather than written down here, so a method
+added to the interface moves the rule without the rule being touched. What a
+static reading of a class body cannot see is stated in
+`tests/conformance/engine_rules.py` beside the walk, and
+`tests/conformance/test_the_engine_rules_bite.py` is where each refusal is shown
+to happen against a tree built to break exactly it.
+
 Two rules #83 asks for are still absent, and neither is held by anything above.
 The integration package not being imported by the queue is a direction inside
 `retusche`, and these rules judge roots, so holding it needs an order declared
-within one package and nothing reads one. And every configuration setting
-appearing in a generated reference now has a surface to be a rule about:
-`retusche.config` declares the settings and `tests/test_configuration.py`
-refuses a committed reference page that differs from what the declaration
-produces. That is a test beside the package rather than a conformance rule, and
-whether it belongs among these is #83's to decide.
+within one package and nothing reads one. And every declared failure type being
+constructed somewhere is not derived over the contract's closed set. All five
+are raised and caught by type today, in `tests/test_fake_engine.py`, so the set
+is covered by tests naming each one rather than by a rule reading the set: a
+sixth type arriving that no code ever raises would be a promise in the interface
+that nothing keeps, and every gate here would stay green.
+
+One more of them has a surface but not a home. Every configuration setting
+appearing in a generated reference is held: `retusche.config` declares the
+settings and `tests/test_configuration.py` refuses a committed reference page
+that differs from what the declaration produces. That is a test beside the
+package rather than a conformance rule, and whether it belongs among these is
+#83's to decide.
 
 ## The checks
 

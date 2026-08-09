@@ -3,7 +3,7 @@
 
 """The job model: where a job can be, how it moves, and where that is kept.
 
-Three modules and one rule between them. `retusche.queue.states` declares the
+Four modules and one rule between them. `retusche.queue.states` declares the
 states, every move that exists and the reason each terminal state carries.
 `retusche.queue.store` makes a move durable, and it asks that table rather than
 deciding for itself, so there is one answer to what a job may do and not one per
@@ -11,10 +11,12 @@ caller. `retusche.queue.budget` decides whether a job fits in the device memory
 the operator allowed, now or once room is freed, and refuses one that never
 fits before a lane is spent on it.
 
-This package holds no ordering and no lane. Those are #28 and #27, and each of
-them moves a job through the table here rather than adding states of its own.
-The budget module is the same: it names a refusal the table already declares a
-reason for, and writes nothing.
+`retusche.queue.ordering` decides which waiting job is considered next and
+carries the bound that stops background work waiting forever.
+
+This package holds no lane, which is #27. Nothing in it writes a job anywhere
+except the store: the budget names a refusal the table already declares a reason
+for, and the ordering answers with a sequence.
 """
 
 from __future__ import annotations
@@ -28,6 +30,17 @@ from retusche.queue.budget import (
     OverBudgetError,
     estimation_defect,
     fits,
+)
+from retusche.queue.ordering import (
+    INTERACTIVE_BEFORE_BACKGROUND,
+    NO_WAIT_ESTIMATE,
+    Priority,
+    QueuePosition,
+    Waiting,
+    interactive_run_after,
+    next_to_start,
+    order,
+    position_of,
 )
 from retusche.queue.states import (
     LEGAL_TRANSITIONS,
@@ -51,7 +64,9 @@ from retusche.queue.store import (
 )
 
 __all__ = [
+    "INTERACTIVE_BEFORE_BACKGROUND",
     "LEGAL_TRANSITIONS",
+    "NO_WAIT_ESTIMATE",
     "REASONS",
     "TERMINAL_STATES",
     "BudgetError",
@@ -68,11 +83,18 @@ __all__ = [
     "JobStore",
     "JobStoreError",
     "OverBudgetError",
+    "Priority",
+    "QueuePosition",
     "TerminalReason",
     "TerminalReasonError",
     "UnknownJobError",
+    "Waiting",
     "check_transition",
     "estimation_defect",
     "fits",
+    "interactive_run_after",
+    "next_to_start",
+    "order",
+    "position_of",
     "reason_problem",
 ]

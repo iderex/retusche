@@ -75,3 +75,12 @@ The directory of model entries, one file per model, that the registry is read fr
 - Unit: a path to a directory, absolute or relative to the working directory
 - Default: none, and the service does not start without it
 - Environment: `RETUSCHE_MODEL_REGISTRY_PATH`
+
+### `device_memory_budget_bytes`
+
+The most device memory this project will hold at once, weights that stay resident included. It is a ceiling the operator sets and not an amount read off the card, because the card is usually shared with a photo library, a transcoder or a desktop session, and taking what looks free breaks the thing this service was meant to sit politely beside. A job whose estimate does not fit in what is left is refused before it reaches the device, with both numbers named. The default is four gibibytes and it is a choice rather than a measurement: nothing here has yet measured what an engine needs, so it is set on the side that refuses loudly rather than the side that quietly takes somebody else's memory.
+
+- Kind: a whole number
+- Unit: bytes of device memory
+- Default: `4294967296`
+- Environment: `RETUSCHE_DEVICE_MEMORY_BUDGET_BYTES`

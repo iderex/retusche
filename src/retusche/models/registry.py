@@ -44,6 +44,15 @@ against.
 
 Whether the digest is the digest of the artefact at the source. That is a
 download and a hash, which is #39's, and nothing here reaches the network.
+
+Whether a source that declares no revision points at something stable. Only two
+URL forms declare one at all, and a source written in any other shape carries
+nothing for `pinned_revision` to read, so nothing is refused there. What pins
+the bytes in that case is the digest alone, which turns a moved artefact into a
+verification failure rather than a different result. The revision check is the
+half that turns that failure into a refusal before anybody downloads anything,
+and it is a floor over the forms this project's sources are written in rather
+than a statement about every URL.
 """
 
 from __future__ import annotations
@@ -52,6 +61,7 @@ import re
 import tomllib
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Final
+from urllib.parse import parse_qsl, unquote, urlsplit
 
 from retusche_contracts.engine import Operation
 
@@ -65,6 +75,7 @@ __all__ = [
     "RegistryError",
     "entry_from_mapping",
     "load_registry",
+    "pinned_revision",
 ]
 
 _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -74,6 +85,22 @@ Lower case and fixed length so two records of one artefact cannot differ by
 spelling, and prefixed with the algorithm so the day a second one is accepted
 the existing entries do not have to be guessed at.
 """
+
+_IMMUTABLE_REVISION = re.compile(r"^[0-9a-f]{40}(?:[0-9a-f]{24})?$")
+"""A revision that cannot be moved: a whole commit hash, in lower case.
+
+Forty digits is the sha-1 form and sixty-four the sha-256 one, and both are
+accepted because which a host uses is the host's choice rather than this
+registry's. An abbreviated hash is not accepted: it is unambiguous in the
+repository it was abbreviated against and stops being so as that repository
+grows, which is the same defect as a branch name arriving later.
+"""
+
+_REVISION_SEGMENTS: Final = frozenset({"blob", "raw", "resolve", "tree"})
+"""Path segments after which a model host names the revision it serves from."""
+
+_REVISION_QUERY_KEYS: Final = frozenset({"ref", "rev", "revision"})
+"""Query keys that name the same thing where the path does not."""
 
 _PLACEHOLDERS: Final = frozenset(
     {
@@ -134,7 +161,11 @@ class ModelEntry:
     """What this project calls the model, and what a request names."""
 
     source: str
-    """Where the artefact is fetched from. #39 verifies what arrives."""
+    """Where the artefact is fetched from. #39 verifies what arrives.
+
+    Where the URL declares a revision, that revision is an immutable one, so
+    the entry names one artefact rather than whatever a branch points at on the
+    day of the fetch."""
 
     digest: str
     """``sha256:`` and sixty-four lower-case hexadecimal digits."""
@@ -174,7 +205,7 @@ def entry_from_mapping(raw: Mapping[str, Any], origin: str) -> ModelEntry:
     )
     return ModelEntry(
         identifier=_text(raw, "identifier", origin, ""),
-        source=_text(raw, "source", origin, ""),
+        source=_source(raw, origin),
         digest=_digest(raw, origin),
         size_bytes=_positive(raw, "size_bytes", origin),
         device_memory_bytes=_positive(raw, "device_memory_bytes", origin),
@@ -212,6 +243,31 @@ def load_registry(directory: Path) -> tuple[ModelEntry, ...]:
             )
         entries[entry.identifier] = entry
     return tuple(entries[key] for key in sorted(entries))
+
+
+def pinned_revision(source: str) -> str | None:
+    """The revision a source names, or ``None`` where its form names none.
+
+    Two forms are read. A model host serves a file at a revision under a path
+    segment, ``.../resolve/<revision>/<file>`` and its neighbours, and where the
+    path does not carry it a query key does. Anything else is a URL this
+    registry cannot take a revision out of, and ``None`` says that rather than
+    guessing one.
+
+    It is public because the revision an entry pins is the half an operator has
+    to be able to compare against what is installed, which is the reporting #44
+    asks for and #39 fetches against. A reader that existed only inside the
+    refusal below would be reimplemented there.
+    """
+    parsed = urlsplit(source)
+    segments = parsed.path.split("/")
+    for index, segment in enumerate(segments[:-1]):
+        if segment in _REVISION_SEGMENTS:
+            return unquote(segments[index + 1])
+    for key, value in parse_qsl(parsed.query):
+        if key in _REVISION_QUERY_KEYS:
+            return value
+    return None
 
 
 def _refuse_unexpected_keys(
@@ -278,6 +334,24 @@ def _licence_identifier(raw: Mapping[str, Any], origin: str) -> str:
             f"and the name of the licence where none does."
         )
     return identifier
+
+
+def _source(raw: Mapping[str, Any], origin: str) -> str:
+    """The source, refusing one whose revision can be moved under the entry."""
+    source = _text(raw, "source", origin, "")
+    revision = pinned_revision(source)
+    if revision is not None and _IMMUTABLE_REVISION.match(revision) is None:
+        raise RegistryError(
+            f"{origin}: source names the revision {revision!r}, and a branch, a "
+            f"tag and an abbreviated hash can all be made to point somewhere "
+            f"else after this entry is written. The digest would then refuse "
+            f"the artefact that arrives, so the operator who installs this "
+            f"model second gets a verification failure and an entry that reads "
+            f"as correct. A whole commit hash in lower-case hexadecimal names "
+            f"one artefact, and changing which one is then a change to this "
+            f"file with a reason in it."
+        )
+    return source
 
 
 def _digest(raw: Mapping[str, Any], origin: str) -> str:

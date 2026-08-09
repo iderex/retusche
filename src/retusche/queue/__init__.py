@@ -8,7 +8,8 @@ states, every move that exists and the reason each terminal state carries.
 `retusche.queue.store` makes a move durable, and it asks that table rather than
 deciding for itself, so there is one answer to what a job may do and not one per
 caller. `retusche.queue.budget` decides whether a job fits in the device memory
-the operator allowed, and refuses it before a lane is spent on it.
+the operator allowed, now or once room is freed, and refuses one that never
+fits before a lane is spent on it.
 
 This package holds no ordering and no lane. Those are #28 and #27, and each of
 them moves a job through the table here rather than adding states of its own.
@@ -22,10 +23,11 @@ from retusche.queue.budget import (
     BudgetError,
     DeviceMemoryBudget,
     EstimationDefect,
+    Fit,
     InvalidBudgetError,
     OverBudgetError,
-    check_fits,
     estimation_defect,
+    fits,
 )
 from retusche.queue.states import (
     LEGAL_TRANSITIONS,
@@ -57,6 +59,7 @@ __all__ = [
     "DeviceMemoryBudget",
     "DuplicateJobError",
     "EstimationDefect",
+    "Fit",
     "IllegalTransitionError",
     "InvalidBudgetError",
     "JobRecord",
@@ -68,8 +71,8 @@ __all__ = [
     "TerminalReason",
     "TerminalReasonError",
     "UnknownJobError",
-    "check_fits",
     "check_transition",
     "estimation_defect",
+    "fits",
     "reason_problem",
 ]

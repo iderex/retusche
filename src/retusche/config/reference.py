@@ -72,6 +72,17 @@ configuration. The redaction is decided by the declaration rather than by
 whoever is printing, so a setting that becomes a secret later is redacted
 everywhere at once instead of everywhere somebody remembered.
 
+The value is also handed to the service in a type that renders as `<redacted>`
+whether it is printed, logged, put in an exception or held inside something that
+prints itself. That covers the rendering nobody has written yet, which is where
+a credential normally leaks. A refusal naming a secret prints `<redacted>` in
+place of what was written, so a credential set in the wrong shape is not quoted
+back at the operator in the error that refuses it.
+
+What this does not do is protect the value once something has deliberately asked
+for it in order to send it, and it is not a defence against reading this
+process's memory.
+
 ## The settings
 """
 

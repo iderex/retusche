@@ -19,6 +19,8 @@ No device, no display and no elevation is needed by anything here.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -29,6 +31,7 @@ from retusche.config import (
     SETTINGS,
     ConfigurationError,
     Kind,
+    Secret,
     Setting,
     environment_name,
     load,
@@ -73,16 +76,29 @@ _FIXTURE = (
     ),
 )
 
-_COMPLETE_FILE = """
+_WRITTEN_CREDENTIAL = "hunter2-and-then-some"
+
+_COMPLETE_FILE = f"""
 store_path = "/srv/retusche/jobs.sqlite3"
-library_token = "hunter2-and-then-some"
+library_token = "{_WRITTEN_CREDENTIAL}"
 """
+
+
+@dataclass(frozen=True, slots=True)
+class _Holder:
+    """Something ordinary that ends up holding a credential.
+
+    A dataclass repr is what a debugger prints, what a structured log emits and
+    what somebody pastes into a bug report, and nobody writes it deliberately.
+    """
+
+    token: Secret
 
 
 def test_a_complete_configuration_loads_with_every_kind_read_back() -> None:
     configuration = load(file_text=_COMPLETE_FILE, settings=_FIXTURE)
     assert configuration.path("store_path") == Path("/srv/retusche/jobs.sqlite3")
-    assert configuration.text("library_token") == "hunter2-and-then-some"
+    assert configuration.secret("library_token").reveal() == "hunter2-and-then-some"
     assert configuration.integer("queue_depth") == 64
     assert configuration.boolean("marking_enabled") is True
     assert configuration.text("instance_name") == "retusche"
@@ -325,9 +341,86 @@ def test_reading_a_setting_that_is_not_declared_is_refused() -> None:
     assert "device is not a setting this project declares" in str(refusal.value)
 
 
-def test_a_secret_is_read_back_through_the_text_accessor() -> None:
+def test_a_secret_is_not_served_through_the_text_accessor() -> None:
+    """The accessor that would hand a credential over as an ordinary string.
+
+    It answered for both kinds once. Nothing was wrong at any step: the setting
+    was declared a secret, the loader parsed it, and the caller asked for text.
+    The value arrived as a `str` with none of the redaction on it, and the next
+    format string printed it.
+    """
     configuration = load(file_text=_COMPLETE_FILE, settings=_FIXTURE)
-    assert configuration.text("library_token") == "hunter2-and-then-some"
+    with pytest.raises(ConfigurationError) as refusal:
+        configuration.text("library_token")
+    assert "declared as secret" in str(refusal.value)
+    assert "read as text" in str(refusal.value)
+    assert _WRITTEN_CREDENTIAL not in str(refusal.value)
+
+
+def test_a_secret_reveals_its_value_only_when_it_is_asked_to() -> None:
+    configuration = load(file_text=_COMPLETE_FILE, settings=_FIXTURE)
+    assert configuration.secret("library_token").reveal() == _WRITTEN_CREDENTIAL
+
+
+@pytest.mark.parametrize(
+    ("description", "render"),
+    [
+        ("str", str),
+        ("repr", repr),
+        ("an f-string", lambda secret: f"{secret}"),
+        ("an f-string asking for a width", lambda secret: f"{secret:>40}"),
+        ("inside a list", lambda secret: repr([secret])),
+        ("inside a dict", lambda secret: repr({"token": secret})),
+        ("inside a dataclass", lambda secret: repr(_Holder(token=secret))),
+        ("inside an exception", lambda secret: str(RuntimeError(f"sending {secret}"))),
+        ("the repr of an exception", lambda secret: repr(RuntimeError(secret))),
+    ],
+)
+def test_no_way_of_turning_a_secret_into_text_yields_the_credential(
+    description: str, render: Callable[[Secret], str]
+) -> None:
+    """Every shape a credential actually leaks through, not `str(secret)` alone.
+
+    A dataclass repr and an f-string inside an exception message are the two
+    that happen. Both reach `__repr__` and `__format__` rather than `__str__`,
+    so a type covering only the first of the three would pass a test written as
+    `str(secret)` and leak in a bug report.
+
+    A logging call formatting its arguments reaches `__str__`, which the first
+    row covers, so it is not repeated as a row of its own.
+    """
+    rendered = render(Secret(_WRITTEN_CREDENTIAL))
+    assert _WRITTEN_CREDENTIAL not in rendered, description
+    assert REDACTED in rendered, description
+
+
+def test_a_secret_written_in_the_wrong_shape_is_not_quoted_back() -> None:
+    """The refusal is the one place a value is printed before anything wrapped it.
+
+    A credential typed into the file without its quotes is read by TOML as a
+    number, the coercion refuses it, and the refusal is what an operator pastes
+    into a bug report. Quoting the value there would put the credential in the
+    message that exists to tell them it was wrong.
+    """
+    with pytest.raises(ConfigurationError) as refusal:
+        load(
+            file_text='store_path = "/srv/jobs.sqlite3"\nlibrary_token = 1234512345\n',
+            settings=_FIXTURE,
+        )
+    message = str(refusal.value)
+    assert "library_token is <redacted>, and this setting is a string" in message
+    assert "1234512345" not in message
+
+
+def test_a_value_that_is_not_a_secret_is_quoted_back_in_full() -> None:
+    """The other arm. A refusal that named no value would leave an operator
+    comparing their file against a sentence about a kind."""
+    with pytest.raises(ConfigurationError) as refusal:
+        load(
+            file_text='store_path = 5\nlibrary_token = "t"\n',
+            settings=_FIXTURE,
+        )
+    assert "store_path is 5, and this setting is a string" in str(refusal.value)
 
 
 def test_an_environment_name_is_the_prefix_and_the_name_in_upper_case() -> None:

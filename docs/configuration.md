@@ -84,3 +84,12 @@ The most device memory this project will hold at once, weights that stay residen
 - Unit: bytes of device memory
 - Default: `4294967296`
 - Environment: `RETUSCHE_DEVICE_MEMORY_BUDGET_BYTES`
+
+### `log_level`
+
+How much the service writes about its own work. It decides which lines are written and never what a line may carry: the fields a line is allowed are checked when the line is built, before any level is compared, so no value here starts logging prompts, paths or picture content. `docs/logging.md` is the field set and is generated from the same declaration the check reads. The default is `info`, which is the service saying what it did without saying it four times; `debug` is for working out what happened and is not meant to be left on, because it multiplies the lines rather than widening them. A value that is not one of the four is refused where the level is read, not by the loader.
+
+- Kind: text
+- Unit: one of `debug`, `info`, `warning`, `error`
+- Default: `info`
+- Environment: `RETUSCHE_LOG_LEVEL`

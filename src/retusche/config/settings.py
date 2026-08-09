@@ -17,17 +17,17 @@ what the setting does, because a name and a type describe the field and not the
 decision. The default is written as an operator would write it, or is absent,
 and absent means the service refuses to start without it.
 
-WHAT IS DECLARED HERE TODAY IS THREE SETTINGS, and that is the tree rather than
+WHAT IS DECLARED HERE TODAY IS FOUR SETTINGS, and that is the tree rather than
 the plan. A setting belongs to the issue that builds the thing it controls: the
-device is #22, the queue depth is #34, the retention period is #36, the log
-level is #64 and the library address is #56. Declaring any of them here would
-answer those issues by side effect, and each of them arrives as one row in the
-tuple below.
+device is #22, the queue depth is #34, the retention period is #36 and the
+library address is #56. Declaring any of them here would answer those issues by
+side effect, and each of them arrives as one row in the tuple below.
 
-The three that are here are the three the tree can already be pointed at: the
-job store, which `retusche.queue.store` opens, the model registry, which
-`retusche.models.registry` reads, and the device memory budget, which
-`retusche.queue.budget` compares an estimate against.
+The four that are here are the four the tree can already be pointed at: the job
+store, which `retusche.queue.store` opens, the model registry, which
+`retusche.models.registry` reads, the device memory budget, which
+`retusche.queue.budget` compares an estimate against, and the log level, which
+`retusche.logging.records` reads a threshold from.
 
 The two paths have no default, and that is the argument rather than an
 omission: a default path writes somebody's job records or looks for their
@@ -40,6 +40,13 @@ refuses a job with a sentence naming both numbers. So the default is chosen on
 the side that announces itself, and it is a choice rather than a measurement:
 nothing in this tree has measured what any engine needs, and #85 is where the
 first such number comes from.
+
+The log level has a default too, and it has a limit worth stating here rather
+than leaving to be assumed. `Kind` has no member for a value drawn from a fixed
+set, so the loader checks that this one is text and nothing here checks that it
+is a level. What refuses `verbose` is
+`retusche.logging.records.level_from_name`, at the point the threshold is read,
+and its refusal names the four that are accepted.
 """
 
 from __future__ import annotations
@@ -163,6 +170,25 @@ SETTINGS: Final = (
             "memory."
         ),
         default="4294967296",
+    ),
+    Setting(
+        name="log_level",
+        kind=Kind.TEXT,
+        unit="one of `debug`, `info`, `warning`, `error`",
+        summary=(
+            "How much the service writes about its own work. It decides which "
+            "lines are written and never what a line may carry: the fields a "
+            "line is allowed are checked when the line is built, before any "
+            "level is compared, so no value here starts logging prompts, "
+            "paths or picture content. `docs/logging.md` is the field set and "
+            "is generated from the same declaration the check reads. The "
+            "default is `info`, which is the service saying what it did "
+            "without saying it four times; `debug` is for working out what "
+            "happened and is not meant to be left on, because it multiplies "
+            "the lines rather than widening them. A value that is not one of "
+            "the four is refused where the level is read, not by the loader."
+        ),
+        default="info",
     ),
 )
 """The declared surface. Nothing reads a setting that is not in here."""

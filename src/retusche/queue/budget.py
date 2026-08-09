@@ -28,14 +28,22 @@ this module exists for. The contract does not say it in those words, and where
 it should be said is `docs/engine-interface.md`, which this change does not
 touch.
 
+Not fitting now is not the same as never fitting
+------------------------------------------------
+Two different answers, and collapsing them costs a job that would have run. A
+job whose estimate exceeds the whole budget cannot be helped by any eviction, so
+it is refused and the caller learns to send something smaller. A job that
+exceeds only what is free right now fits as soon as resident weights are
+released, so it waits where it is. `fits` returns which of the two non-terminal
+answers applies and raises only for the terminal one.
+
 What this module does not decide
 --------------------------------
-Which job goes next, whether a lane is free, and what happens to a job after it
-is refused. Ordering is #28, the lane is #27, and recovering from an
-out-of-memory failure is #31. This module answers one question, once: does this
-job fit in what is left of the budget. `check_fits` returns nothing when it
-does and raises when it does not, in the shape `retusche.queue.states` uses for
-the same reason - the caller writes the move, and nothing here writes anything.
+Which job goes next, whether a lane is free, how long a waiting job waits, and
+what happens to a job after it is refused. Ordering and the starvation bound are
+#28, the lane is #27, eviction is #32 and recovering from an out-of-memory
+failure is #31. Nothing here writes anything: the caller writes the move, which
+is the shape `retusche.queue.states` uses and for the same reason.
 
 A refusal is a type and not a message
 -------------------------------------
@@ -48,6 +56,7 @@ the operator reading it afterwards.
 
 from __future__ import annotations
 
+import enum
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Final
 
@@ -60,11 +69,28 @@ __all__ = [
     "BudgetError",
     "DeviceMemoryBudget",
     "EstimationDefect",
+    "Fit",
     "InvalidBudgetError",
     "OverBudgetError",
-    "check_fits",
     "estimation_defect",
+    "fits",
 ]
+
+
+class Fit(enum.StrEnum):
+    """What the budget says about a job it did not refuse."""
+
+    NOW = "now"
+    """The estimate is inside what is free, so the job may go to a lane."""
+
+    WHEN_ROOM_IS_FREED = "when-room-is-freed"
+    """The estimate is inside the budget and outside what is free right now.
+
+    The job waits rather than failing. Nothing here decides how long, or whether
+    the thing that frees the room is an eviction (#32) or a running job
+    finishing; what this value says is only that waiting is capable of helping,
+    which is the fact `OverBudgetError` exists to distinguish it from.
+    """
 
 
 class BudgetError(Exception):
@@ -81,11 +107,12 @@ class InvalidBudgetError(BudgetError):
 
 
 class OverBudgetError(BudgetError):
-    """The job's estimate does not fit in what is left of the budget.
+    """The job's estimate exceeds the whole budget, so nothing makes room.
 
-    Refusal, not failure. Nothing was attempted, nothing was allocated, and the
-    same request may fit later once the resident weights it did not fit beside
-    have been released.
+    Refusal, not failure. Nothing was attempted and nothing was allocated, and
+    resubmitting the same request against the same budget is refused again. That
+    is what separates this from a job that merely does not fit right now, which
+    is `Fit.WHEN_ROOM_IS_FREED` and is not an error at all.
     """
 
     terminal_reason: Final = TerminalReason.REFUSED_OVER_BUDGET
@@ -189,19 +216,27 @@ class EstimationDefect:
         )
 
 
-def check_fits(
+def fits(
     job: JobDescription,
     estimate: DeviceMemoryEstimate,
     budget: DeviceMemoryBudget,
-) -> None:
-    """Refuse a job whose estimate exceeds what is left of the budget.
+) -> Fit:
+    """Say whether the job fits now, fits later, or never fits.
 
-    Returns nothing where it fits. An estimate equal to the room left fits: the
-    figure is documented as an upper bound the engine is willing to be held to,
-    so a job that needs exactly what is there is a job the budget was set for.
+    Raises `OverBudgetError` only for the third, because that is the only one of
+    the three that ends the job. The other two are answers a caller acts on: run
+    it, or leave it where it is.
+
+    An estimate equal to the room available fits. The figure is documented as an
+    upper bound the engine is willing to be held to, so a job that needs exactly
+    what is there is a job the budget was set for. Both boundaries are read that
+    way, and both are held by a test.
     """
-    if estimate.peak_bytes > budget.free_bytes:
+    if estimate.peak_bytes > budget.total_bytes:
         raise OverBudgetError(job, estimate, budget)
+    if estimate.peak_bytes > budget.free_bytes:
+        return Fit.WHEN_ROOM_IS_FREED
+    return Fit.NOW
 
 
 def estimation_defect(
@@ -223,14 +258,14 @@ def _refusal_message(
     estimate: DeviceMemoryEstimate,
     budget: DeviceMemoryBudget,
 ) -> str:
-    """Both numbers, the room they were compared in, and the shape refused."""
+    """Both numbers, the shape refused, and why waiting would not help."""
     return (
         f"{_shape(job)} is estimated at {estimate.peak_bytes} bytes "
-        f"{_provenance(estimate)} and {budget.free_bytes} bytes are free of a "
-        f"{budget.total_bytes} byte device memory budget, "
-        f"{budget.resident_bytes} of which resident weights are holding. The "
-        f"job is refused before it reaches the device, because an allocation "
-        f"that fails there can be something else's."
+        f"{_provenance(estimate)} against a device memory budget of "
+        f"{budget.total_bytes} bytes, which is the whole of what this project "
+        f"may hold at once. No eviction makes room for it, so it is refused "
+        f"rather than left waiting for one. Either the request is smaller or "
+        f"the budget the operator set is larger."
     )
 
 

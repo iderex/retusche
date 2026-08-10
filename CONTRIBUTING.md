@@ -92,12 +92,16 @@ measured and found complete. Both lists live in `pyproject.toml`, and the suite
 refuses to start if a package under `src/` is in neither: a package cannot arrive
 without somebody deciding which side of the line it is on.
 
-Two rules bind the suite itself.
+Three rules bind the suite itself.
 
-Every test runs with no display, no elevation and no GPU. The `test` job prints
-what the runner actually had before it runs anything, so that is a fact from the
-run rather than a claim made here. Nothing yet refuses a test that quietly needs
-one of the three; that is issue #84.
+Every test runs with no display, no GPU and as an unelevated process. The `test`
+job prints what the runner actually had before it runs anything and then fails on
+what it printed, so that is a fact measured where the claim is made rather than a
+claim made here. Two things it does not say. The runner has passwordless `sudo`,
+so what is refused is a suite running as root and not a machine on which root is
+unreachable; issue #84 carries that sentence. And it measures the machine, not
+the tests: a test reaching a device through a raw path or a subprocess is
+invisible to it and to the two rules below.
 
 A test may not import a machine-learning runtime while its module executes. Such
 a test wants weights, a device and a driver, and it belongs in the hardware
@@ -108,6 +112,22 @@ refused module roots are `[tool.retusche.import-boundary]` in `pyproject.toml`,
 and a class body or an `if TYPE_CHECKING:` block counts as module level, because
 those are where such an import gets written when somebody wants it to look
 conditional.
+
+A test that imports one of those roots inside a function body is refused too,
+unless it is marked `hardware`. Deferring the import is what somebody writes when
+the rule above has already refused them once, and it loads the runtime into the
+process just the same, so the marker is how a test says it needs a device instead
+of arriving at one by surprise. The marker is registered in
+`[tool.pytest.ini_options]` and the default run deselects it from `addopts`, so
+nothing has to be remembered on a machine that does have a device in it. This
+prints the marked set:
+
+    uv run pytest --collect-only -m hardware -q
+
+The marker is one word in `[tool.retusche.hardware-harness]`, read by the rule
+and held against both of those places by `tests/test_hardware_harness.py`,
+because a rename reaching two of the three leaves a gate that selects nothing and
+a suite that stays green.
 
 ## The import boundary
 

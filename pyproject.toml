@@ -157,17 +157,40 @@ retusche_contracts = ["retusche_contracts"]
 # [tool.coverage.run] source, so a new package cannot arrive without a decision.
 retusche_worker = "the engine worker, the one package permitted a machine-learning runtime. No unit test loads it, so a coverage number over it would describe code this suite deliberately never runs. Its own harness is the hardware one."
 
+[tool.retusche.hardware-harness]
+# The one word a test says when it needs a device. Written here rather than in
+# the three places that act on it, because those three have to agree: pytest
+# registers it under [tool.pytest.ini_options] markers, the same table's addopts
+# deselects it, and the discovery rule in tests/conftest.py refuses an unmarked
+# test that reaches for a runtime. tests/test_hardware_harness.py holds them to
+# this string, so a rename that reaches two of the three is a red run rather
+# than a gate that quietly stops selecting anything.
+marker = "hardware"
+
 [tool.pytest.ini_options]
 minversion = "9.1"
 testpaths = ["tests"]
 
+# The markers this suite knows. --strict-markers below refuses any other, so an
+# invented one fails collection instead of silently matching nothing.
+markers = [
+    "hardware: needs a real device, a driver and weights. Not collected by the default run.",
+]
+
 # --cov with no value measures what [tool.coverage.run] source names, so the
 # scope is stated once and the command line carries no rule of its own. The
 # floor is in [tool.coverage.report] for the same reason.
+#
+# -m "not hardware" is here and not on a command line for the same reason as the
+# rest: a selection a contributor has to remember is one that is forgotten on the
+# machine with a GPU in it, where the forgetting is invisible because the tests
+# pass.
 addopts = [
     "-ra",
     "--strict-markers",
     "--strict-config",
+    "-m",
+    "not hardware",
     "--cov",
     "--cov-report=term-missing",
 ]

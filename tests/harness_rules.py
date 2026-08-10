@@ -86,6 +86,175 @@ def forbidden_import_message(filename: str, offences: list[tuple[int, str]]) -> 
     )
 
 
+def _mark_name(node: ast.expr) -> str | None:
+    """The name in ``pytest.mark.<name>``, however the mark was written.
+
+    Four spellings reach the same mark and all four are read here: the bare
+    attribute, the called form that carries a reason, ``mark.<name>`` where the
+    name was imported directly, and any longer attribute chain ending in
+    ``mark``. Reading only the first would leave the other three looking
+    unmarked, and a rule that refuses a correctly marked test is a rule people
+    route around.
+    """
+    if isinstance(node, ast.Call):
+        node = node.func
+    if not isinstance(node, ast.Attribute):
+        return None
+    owner = node.value
+    if isinstance(owner, ast.Name) and owner.id == "mark":
+        return node.attr
+    if isinstance(owner, ast.Attribute) and owner.attr == "mark":
+        return node.attr
+    return None
+
+
+def _carries_mark(decorators: list[ast.expr], marker: str) -> bool:
+    return any(_mark_name(decorator) == marker for decorator in decorators)
+
+
+def _module_is_marked(tree: ast.Module, marker: str) -> bool:
+    """Whether ``pytestmark`` at module level applies the marker to every test.
+
+    A single mark and a list of them are both read, because both are what pytest
+    accepts and neither is the unusual one.
+    """
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            targets: list[ast.expr] = node.targets
+            value: ast.expr | None = node.value
+        elif isinstance(node, ast.AnnAssign):
+            targets, value = [node.target], node.value
+        else:
+            continue
+        if value is None or not any(
+            isinstance(target, ast.Name) and target.id == "pytestmark"
+            for target in targets
+        ):
+            continue
+        applied = value.elts if isinstance(value, ast.List | ast.Tuple) else [value]
+        if any(_mark_name(mark) == marker for mark in applied):
+            return True
+    return False
+
+
+def _forbidden_import(node: ast.AST, roots: Collection[str]) -> list[tuple[int, str]]:
+    """The line and the written name for an import statement of a forbidden root."""
+    if isinstance(node, ast.Import):
+        return [
+            (node.lineno, alias.name)
+            for alias in node.names
+            if alias.name.split(".")[0] in roots
+        ]
+    if (
+        isinstance(node, ast.ImportFrom)
+        and node.level == 0
+        and node.module
+        and node.module.split(".")[0] in roots
+    ):
+        return [(node.lineno, node.module)]
+    return []
+
+
+def _deferred_offences(
+    node: ast.AST,
+    roots: Collection[str],
+    marker: str,
+    *,
+    inside_function: bool,
+    marked: bool,
+    found: list[tuple[int, str]],
+) -> None:
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            _deferred_offences(
+                child,
+                roots,
+                marker,
+                inside_function=inside_function or not isinstance(child, ast.ClassDef),
+                marked=marked or _carries_mark(child.decorator_list, marker),
+                found=found,
+            )
+            continue
+        if isinstance(child, ast.Lambda):
+            _deferred_offences(
+                child,
+                roots,
+                marker,
+                inside_function=True,
+                marked=marked,
+                found=found,
+            )
+            continue
+        if inside_function and not marked:
+            found.extend(_forbidden_import(child, roots))
+        _deferred_offences(
+            child,
+            roots,
+            marker,
+            inside_function=inside_function,
+            marked=marked,
+            found=found,
+        )
+
+
+def deferred_forbidden_imports(
+    source: bytes,
+    roots: Collection[str],
+    marker: str,
+    filename: str = "<source>",
+) -> list[tuple[int, str]]:
+    """Line and module for every runtime import a function body defers, unmarked.
+
+    The rule beside this one reads module level and stops at the first function.
+    This one starts where that one stops, and it exists because the import a
+    test writes when it wants a device is the deferred one: written inside the
+    test body it looks like a smaller decision than the same line at the top of
+    the file, and it loads the runtime into the process just the same.
+
+    What makes it a rule rather than a ban is the marker. A test that says it
+    needs hardware may reach for it, because the default run does not collect
+    that test; a test that says nothing may not, because the default run does.
+    So the refusal is about the declaration being absent and never about the
+    import.
+
+    The marker is read from a decorator on the test, from a decorator on a class
+    around it, and from ``pytestmark`` at module level, which are the three
+    places pytest reads it from.
+    """
+    tree = ast.parse(source, filename=filename)
+    if _module_is_marked(tree, marker):
+        return []
+    found: list[tuple[int, str]] = []
+    _deferred_offences(
+        tree, roots, marker, inside_function=False, marked=False, found=found
+    )
+    return sorted(set(found))
+
+
+def deferred_import_message(
+    filename: str, offences: list[tuple[int, str]], marker: str
+) -> str:
+    """What a test deferring a runtime import is told, and what to do about it.
+
+    Written here rather than at the raise site, for the reason the message above
+    is: the wording is one of the things the suite reads, and a refusal that
+    stopped naming the marker would leave a reader knowing they are refused and
+    not knowing which word makes them legal.
+    """
+    named = "; ".join(f"line {line}: {module}" for line, module in offences)
+    return (
+        f"{filename}: a test that reaches for a machine-learning runtime must "
+        f"say so, and this one imports one inside a function body without "
+        f"saying it ({named}). Such a test wants weights, a device and a driver, "
+        f"and the default run has none of the three. Mark it "
+        f"@pytest.mark.{marker} so the default run leaves it out, or move the "
+        f"import out of the body and let the discovery rule refuse it where a "
+        f"reader can see it. The refused module roots are "
+        f"[tool.retusche.import-boundary] in pyproject.toml and the marker is "
+        f"[tool.retusche.hardware-harness]."
+    )
+
+
 def _import_base(module: str, *, is_package: bool, level: int) -> str | None:
     """What a relative import of ``level`` dots resolves against, or nothing.
 

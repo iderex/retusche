@@ -152,29 +152,52 @@ jobs:
         # version, and the floor is a number a particular coverage produced.
         run: uv sync --locked
 
-      - name: Say what the runner had
-        # The suite is meant to pass with no GPU driver present. That is a claim
-        # about a machine, so the run prints the machine rather than this file
-        # asserting it. Nothing here refuses anything: turning these facts into a
-        # property the suite refuses a violation of is #84.
+      - name: Say what the runner had, and refuse a runner that had more
+        # The suite is meant to pass with no display, no GPU driver and no
+        # elevated process. Those are claims about a machine, so they are
+        # measured on the machine where the claim is being made rather than
+        # written into a file that cannot see one. Every branch still prints:
+        # a step that printed nothing on the absent case would read the same as
+        # a step that was skipped, and the printing is what a reader checks the
+        # refusal against.
         #
-        # Every branch prints something. A step that printed nothing on the
-        # absent case would read the same as a step that was skipped.
+        # What this does not establish, and must not be read as: the runner has
+        # passwordless sudo, so an unelevated process is not the same as a
+        # machine with no administrative rights available. What is refused here
+        # is a suite running as root, which is the property this environment
+        # supports. #84 carries the wider sentence.
+        #
+        # It also says nothing about a test that reaches a device without
+        # importing one of the declared runtimes. The suite refuses the import
+        # route at collection; a raw device path or a subprocess goes past both.
         run: |
           set -euo pipefail
+          problems=0
           if command -v nvidia-smi >/dev/null 2>&1; then
             echo "nvidia-smi: on PATH"
+            problems=$((problems + 1))
           else
             echo "nvidia-smi: not on PATH"
           fi
           if compgen -G '/dev/nvidia*' >/dev/null; then
             echo "device nodes: /dev/nvidia* present"
+            problems=$((problems + 1))
           else
             echo "device nodes: no /dev/nvidia*"
           fi
           echo "DISPLAY=${DISPLAY-unset}"
           echo "WAYLAND_DISPLAY=${WAYLAND_DISPLAY-unset}"
+          if [ -n "${DISPLAY-}" ] || [ -n "${WAYLAND_DISPLAY-}" ]; then
+            problems=$((problems + 1))
+          fi
           echo "effective uid: $(id -u)"
+          if [ "$(id -u)" -eq 0 ]; then
+            problems=$((problems + 1))
+          fi
+          if [ "$problems" -ne 0 ]; then
+            echo "::error::No display, no GPU driver and an unelevated process are what the default suite claims to pass under. The lines above say this runner is not that, so a green run here would not mean what it is read as meaning."
+            exit 1
+          fi
 
       - name: Run the suite under the coverage floor
         # No options on this command line. The test paths, the coverage scope and

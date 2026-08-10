@@ -23,6 +23,10 @@ operations = ["erase"]
 [licence]
 identifier = "Apache-2.0"
 url = "https://www.apache.org/licenses/LICENSE-2.0"
+
+[access]
+gated = false
+obtain = ""
 ```
 
 That example is in this document and not in this directory, and it is not a
@@ -39,6 +43,23 @@ operator to install the model gets a verification failure and a record that
 reads as correct. Changing which artefact an entry names is a change to its
 revision in its own file, and the reason belongs in the message of the commit
 that makes it. Nothing refuses a change made without one.
+
+The `access` table is the other half of the licence, and it is a separate fact
+from it. `gated` says whether the artefact can be fetched at all before somebody
+has agreed to something at the source, and `obtain` is what that somebody does,
+written for a person to act on. A permissively licensed model can still sit
+behind an account wall, and a model with no wall in front of it writes
+`obtain = ""` rather than leaving the field out: the loader refuses a gated
+entry that says nothing about access, and refuses an ungated entry that carries
+instructions nobody will be shown.
+
+Nothing here checks whether the source really is gated. That takes a request,
+which is #39's, so an entry with the two the wrong way round loads. What is
+refused is the entry that contradicts itself without leaving the file.
+
+A credential for a source is never written into an entry. It is configuration,
+and the entry key check refuses it here for the ordinary reason rather than a
+special one: it is a key this registry does not read.
 
 ## This directory holds no model yet
 

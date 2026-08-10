@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from retusche.models.registry import (
+    Access,
     Licence,
     ModelEntry,
     RegistryError,
@@ -76,6 +77,10 @@ operations = ["erase", "fill"]
 [licence]
 identifier = "Apache-2.0"
 url = "https://www.apache.org/licenses/LICENSE-2.0"
+
+[access]
+gated = false
+obtain = ""
 """
 
 
@@ -102,6 +107,12 @@ def _with_licence(**changes: object) -> dict[str, Any]:
     return raw
 
 
+def _with_access(**changes: object) -> dict[str, Any]:
+    raw = _complete()
+    raw["access"] = {**raw["access"], **changes}
+    return raw
+
+
 def test_a_complete_entry_loads_with_every_field_read() -> None:
     """The baseline the fixtures below are one change away from."""
     entry = entry_from_mapping(_complete(), "example.toml")
@@ -117,6 +128,7 @@ def test_a_complete_entry_loads_with_every_field_read() -> None:
             identifier="Apache-2.0",
             url="https://www.apache.org/licenses/LICENSE-2.0",
         ),
+        access=Access(gated=False, obtain=""),
     )
 
 
@@ -131,6 +143,7 @@ def test_a_complete_entry_loads_with_every_field_read() -> None:
         "engine",
         "operations",
         "licence",
+        "access",
     ],
 )
 def test_an_entry_missing_any_field_is_refused(key: str) -> None:
@@ -460,3 +473,109 @@ def test_the_shipped_registry_directory_exists_and_is_read(
     """The test above over a directory that is not there would pass as loudly."""
     assert shipped_registry_path.is_dir()
     assert (shipped_registry_path / "README.md").is_file()
+
+
+def test_a_gated_entry_loads_with_what_the_operator_has_to_do() -> None:
+    """The entry this field exists for. What is recorded is the step between
+    reading the terms and holding the file, and it is a sentence rather than a
+    flag, because a flag tells an operator that something is in the way and not
+    what to do about it."""
+    entry = entry_from_mapping(
+        _with_access(
+            gated=True,
+            obtain=(
+                "Sign in at the model host, open the model page, and accept the "
+                "licence there. The download stays refused until you have."
+            ),
+        ),
+        "example.toml",
+    )
+    assert entry.access.gated
+    assert "accept the licence" in entry.access.obtain
+
+
+def test_a_gated_entry_that_says_nothing_about_access_is_refused() -> None:
+    """The failure this whole field is for. Without the sentence, the fetch is
+    refused at the source and reaches the operator as a transport error, which
+    reads like the host being unavailable."""
+    with pytest.raises(RegistryError) as refused:
+        entry_from_mapping(_with_access(gated=True, obtain=""), "example.toml")
+    assert "example.toml" in str(refused.value)
+    assert "transport error" in str(refused.value)
+
+
+def test_a_gated_entry_whose_instructions_are_whitespace_is_refused() -> None:
+    """The one-character version of the same mistake. A space passes every check
+    that asks whether the key is present and whether its value is a string."""
+    with pytest.raises(RegistryError) as refused:
+        entry_from_mapping(_with_access(gated=True, obtain="   "), "example.toml")
+    assert "transport error" in str(refused.value)
+
+
+def test_an_ungated_entry_carrying_instructions_is_refused() -> None:
+    """The contradiction read the other way, and it is what a copied entry
+    produces: the instructions survive the copy and the flag does not. One of the
+    two fields is wrong and the file cannot say which."""
+    with pytest.raises(RegistryError) as refused:
+        entry_from_mapping(
+            _with_access(gated=False, obtain="Accept the licence at the source."),
+            "example.toml",
+        )
+    assert "not gated" in str(refused.value)
+    assert "Accept the licence at the source." in str(refused.value)
+
+
+@pytest.mark.parametrize("value", ["true", "yes", 1, 0, "no", "false"])
+def test_a_gate_that_is_not_a_boolean_is_refused(value: object) -> None:
+    """`gated = "no"` is the near miss, and it is worse than a missing key: every
+    reading that treats a non-empty string as true reads it as gated, and every
+    reading that does not reads it as open."""
+    with pytest.raises(RegistryError) as refused:
+        entry_from_mapping(_with_access(gated=value), "example.toml")
+    assert "access.gated" in str(refused.value)
+    assert "true or false" in str(refused.value)
+
+
+def test_instructions_that_are_not_a_string_are_refused() -> None:
+    with pytest.raises(RegistryError) as refused:
+        entry_from_mapping(_with_access(gated=True, obtain=17), "example.toml")
+    assert "access.obtain" in str(refused.value)
+
+
+@pytest.mark.parametrize("key", ["gated", "obtain"])
+def test_an_access_table_missing_either_field_is_refused(key: str) -> None:
+    raw = _complete()
+    del raw["access"][key]
+    with pytest.raises(RegistryError) as refused:
+        entry_from_mapping(raw, "example.toml")
+    assert f"access.{key}" in str(refused.value)
+
+
+def test_an_unknown_key_in_the_access_table_is_refused() -> None:
+    """The misspelling that leaves the entry looking complete. `gate` written
+    where `gated` was meant declares no gate at all, and the required-key check
+    on `gated` is what would then have to catch it."""
+    raw = _complete()
+    raw["access"] = {"gate": True, "obtain": "Accept the licence at the source."}
+    with pytest.raises(RegistryError) as refused:
+        entry_from_mapping(raw, "example.toml")
+    assert "access table" in str(refused.value)
+    assert "gate" in str(refused.value)
+
+
+def test_an_access_written_as_one_value_is_refused() -> None:
+    """A gate written as a bare `true` carries whether the model is gated and
+    nothing about what to do, which is the half an operator needs."""
+    with pytest.raises(RegistryError) as refused:
+        entry_from_mapping(_with("access", True), "example.toml")
+    assert "access" in str(refused.value)
+
+
+def test_a_credential_written_into_an_entry_is_refused() -> None:
+    """A source credential belongs in configuration and never in the registry,
+    which is a reviewable file in a public repository. Nothing special refuses
+    it: the entry key check does, because a credential is a key the registry
+    does not read."""
+    with pytest.raises(RegistryError) as refused:
+        entry_from_mapping(_with("token", "hf_examplesecret"), "example.toml")
+    assert "token" in str(refused.value)

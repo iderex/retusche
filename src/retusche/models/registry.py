@@ -45,6 +45,13 @@ against.
 Whether the digest is the digest of the artefact at the source. That is a
 download and a hash, which is #39's, and nothing here reaches the network.
 
+Whether an entry declaring itself gated is actually gated at its source, or
+whether an entry declaring itself open is actually open. Both are answered by a
+request, which is #39's, and an entry that has the two the wrong way round loads
+here. What is refused is the pair of states that contradict themselves without
+leaving the file: gated with nothing said about obtaining access, and not gated
+with instructions for obtaining it.
+
 Whether a source that declares no revision points at something stable. Only two
 URL forms declare one at all, and a source written in any other shape carries
 nothing for `pinned_revision` to read, so nothing is refused there. What pins
@@ -70,6 +77,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 __all__ = [
+    "Access",
     "Licence",
     "ModelEntry",
     "RegistryError",
@@ -126,6 +134,7 @@ load, because it ships.
 """
 
 _LICENCE_FIELDS: Final = ("identifier", "url")
+_ACCESS_FIELDS: Final = ("gated", "obtain")
 _ENTRY_FIELDS: Final = (
     "identifier",
     "source",
@@ -135,6 +144,7 @@ _ENTRY_FIELDS: Final = (
     "engine",
     "operations",
     "licence",
+    "access",
 )
 
 
@@ -151,6 +161,32 @@ class Licence:
 
     url: str
     """Where the text of those terms is published."""
+
+
+@dataclass(frozen=True, slots=True)
+class Access:
+    """Whether the artefact is behind an acceptance gate, and what that costs.
+
+    Some model families are distributed so that the download succeeds only once
+    an account has agreed to the terms at the source. A fetch that does not know
+    that fails as a transport error, which reads like the host being down, and
+    the operator retries it. Worse is the other direction: a system holding a
+    credential can be handed the weights without the operator ever having read
+    what they agreed to.
+
+    So the gate is declared per entry, beside the licence and not inside it: the
+    terms and the barrier are different facts, and a permissively licensed model
+    can still sit behind an account wall.
+    """
+
+    gated: bool
+    """Whether obtaining the artefact requires agreeing to something first."""
+
+    obtain: str
+    """What the operator does to get access, for a gated entry, and empty for
+    one that is not. Written for a person to act on: the licence they will be
+    agreeing to is in `Licence`, and this is the step between reading it and
+    holding the file."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -188,6 +224,9 @@ class ModelEntry:
     licence: Licence
     """The terms of the weights. There is no entry without one."""
 
+    access: Access
+    """Whether the artefact is gated, and what the operator does about it."""
+
 
 def entry_from_mapping(raw: Mapping[str, Any], origin: str) -> ModelEntry:
     """One parsed registry file as an entry, or a refusal naming the file.
@@ -203,6 +242,8 @@ def entry_from_mapping(raw: Mapping[str, Any], origin: str) -> ModelEntry:
         identifier=_licence_identifier(raw_licence, origin),
         url=_text(raw_licence, "url", origin, "licence."),
     )
+    raw_access = _mapping(raw, "access", origin)
+    _refuse_unexpected_keys(raw_access, _ACCESS_FIELDS, origin, "access table")
     return ModelEntry(
         identifier=_text(raw, "identifier", origin, ""),
         source=_source(raw, origin),
@@ -212,6 +253,7 @@ def entry_from_mapping(raw: Mapping[str, Any], origin: str) -> ModelEntry:
         engine=_text(raw, "engine", origin, ""),
         operations=_operations(raw, origin),
         licence=licence,
+        access=_access(raw_access, origin),
     )
 
 
@@ -307,6 +349,47 @@ def _text(raw: Mapping[str, Any], key: str, origin: str, prefix: str) -> str:
             f"exactly like a field that was answered."
         )
     return value
+
+
+def _access(raw: Mapping[str, Any], origin: str) -> Access:
+    """The gate declaration, refusing the two states that contradict themselves.
+
+    A gated entry saying nothing about how to obtain access leaves the failure
+    it exists to prevent: the fetch is refused at the source and an operator has
+    a transport error and no next step. An ungated entry carrying instructions
+    is the same defect read the other way, because those instructions are shown
+    to nobody and one of the two fields is wrong with nothing saying which.
+    """
+    gated = _required(raw, "gated", origin, "access.")
+    if not isinstance(gated, bool):
+        raise RegistryError(
+            f"{origin}: access.gated is {gated!r} and this registry reads it as "
+            f"true or false. A gate written as a string or a number is a value "
+            f"something else has to interpret, and the reading that treats a "
+            f"non-empty string as true would read 'no' as gated."
+        )
+    obtain = _required(raw, "obtain", origin, "access.")
+    if not isinstance(obtain, str):
+        raise RegistryError(
+            f"{origin}: access.obtain is {obtain!r} and this field is a "
+            f"sentence an operator acts on."
+        )
+    if gated and not obtain.strip():
+        raise RegistryError(
+            f"{origin}: this entry declares the model gated and says nothing "
+            f"about how an operator obtains access. Without that sentence the "
+            f"download fails at the source and reaches the operator as a "
+            f"transport error, which reads like the host being unavailable and "
+            f"is retried rather than acted on."
+        )
+    if not gated and obtain.strip():
+        raise RegistryError(
+            f"{origin}: this entry declares the model not gated and carries "
+            f"instructions for obtaining access: {obtain!r}. One of the two is "
+            f"wrong and nothing here can say which, and instructions on an "
+            f"entry nothing gates are shown to nobody."
+        )
+    return Access(gated=gated, obtain=obtain)
 
 
 def _mapping(raw: Mapping[str, Any], key: str, origin: str) -> Mapping[str, Any]:

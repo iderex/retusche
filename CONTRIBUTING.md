@@ -164,6 +164,33 @@ that needs the runtime goes behind the engine interface in `retusche_contracts`
 and runs in the worker process. Running the worker in a process of its own and
 supervising it is issue #17.
 
+## A line about the work goes through the declaration
+
+`retusche.logging.records` builds every log line and refuses one carrying a
+field the declaration does not name, which is how a photograph, a prompt or a
+path out of the operator's library is kept out of a log. That refusal is worth
+what the ways around it allow, so two of them are closed: a module under the
+orchestration packages may not import a logging framework, and it may not write
+to the process's own output. `print` is not part of this rule because ruff's
+`T20` already refuses it; what these two catch is the line somebody writes after
+being refused once.
+
+The refused imports, the refused calls and the failure each one prevents are
+`[tool.retusche.output-discipline]` in `pyproject.toml`, so adding one is a data
+change. Adding one is also how a third-party logger would be handled if a change
+ever brought one into the dependency set.
+
+The check name is `test`, which is the suite, and the "Published checks" section
+below carries it with the command that reproduces it. No new name is published
+by this rule.
+
+What it cannot see is in `tests/test_output_discipline.py` rather than here, and
+the largest of them is the worker: it runs in a process of its own and the layer
+rules refuse it an import of the orchestration layer, so it cannot reach the
+declaration and is outside the rule. Which module a component would rather log
+through is a review question either way; what is refused is a second way of
+saying anything at all.
+
 ## A new engine is not complete until the contract suite runs against it
 
 `tests/contract/` holds the clauses every engine is held to: what a capability

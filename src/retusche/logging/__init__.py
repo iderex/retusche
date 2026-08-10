@@ -15,8 +15,10 @@ the rest follows from: a format string accepts a filename, a prompt or a
 caller's own text and says so nowhere, and a declared field set cannot.
 
 Nothing in this tree logs yet. What arrives with the first log site is a call to
-`record`, and what refuses a call made around this module rather than through it
-is issue #80.
+`record`, and what refuses a module going around this one rather than through it
+is `[tool.retusche.output-discipline]` in `pyproject.toml`, applied by
+`tests/test_output_discipline.py` to every module under the orchestration
+packages except this one.
 """
 
 from __future__ import annotations

@@ -17,29 +17,34 @@ what the setting does, because a name and a type describe the field and not the
 decision. The default is written as an operator would write it, or is absent,
 and absent means the service refuses to start without it.
 
-WHAT IS DECLARED HERE TODAY IS FOUR SETTINGS, and that is the tree rather than
+WHAT IS DECLARED HERE TODAY IS SIX SETTINGS, and that is the tree rather than
 the plan. A setting belongs to the issue that builds the thing it controls: the
 device is #22, the queue depth is #34, the retention period is #36 and the
 library address is #56. Declaring any of them here would answer those issues by
 side effect, and each of them arrives as one row in the tuple below.
 
-The four that are here are the four the tree can already be pointed at: the job
+The six that are here are the six the tree can already be pointed at: the job
 store, which `retusche.queue.store` opens, the model registry, which
-`retusche.models.registry` reads, the device memory budget, which
-`retusche.queue.budget` compares an estimate against, and the log level, which
-`retusche.logging.records` reads a threshold from.
+`retusche.models.registry` reads, the model store and the disk it may fill,
+which `retusche.models.storage` measures and refuses against, the device memory
+budget, which `retusche.queue.budget` compares an estimate against, and the log
+level, which `retusche.logging.records` reads a threshold from.
 
-The two paths have no default, and that is the argument rather than an
+The three paths have no default, and that is the argument rather than an
 omission: a default path writes somebody's job records or looks for their
 weights wherever the process happened to be started, and being wrong there is
-silent. The budget has one, and it is the opposite case: being wrong there is
-loud in one direction and silent in the other. A default set too high hands out
-memory the operator meant to keep for the photo library, and nothing says so
-until something else on the card fails to allocate. A default set too low
-refuses a job with a sentence naming both numbers. So the default is chosen on
-the side that announces itself, and it is a choice rather than a measurement:
-nothing in this tree has measured what any engine needs, and #85 is where the
-first such number comes from.
+silent. The two budgets have one, and they are the opposite case: being wrong
+there is loud in one direction and silent in the other. A device budget set too
+high hands out memory the operator meant to keep for the photo library, and
+nothing says so until something else on the card fails to allocate. A disk
+budget set too high fills the volume that holds the photographs themselves, and
+what says so is the library failing to write. Set too low, either refuses with a
+sentence naming both numbers. So both defaults are chosen on the side that
+announces itself, and both are a choice rather than a measurement. Nothing in
+this tree has measured what an engine needs on a device, and #85 is where the
+first such number comes from. Nothing in this tree carries a model entry either,
+so no artefact size has been read from one: the registry declares a `size_bytes`
+per model and `models/registry/` holds no model, which #43 fills.
 
 The log level has a default too, and it has a limit worth stating here rather
 than leaving to be assumed. `Kind` has no member for a value drawn from a fixed
@@ -150,6 +155,41 @@ SETTINGS: Final = (
             "declared there, licence included, and a directory that is not the "
             "intended one offers a different set without saying so."
         ),
+    ),
+    Setting(
+        name="model_store_path",
+        kind=Kind.PATH,
+        unit="a path to a directory, absolute or relative to the working directory",
+        summary=(
+            "Where model artefacts are kept. This is the tens of gigabytes, "
+            "not the small declarations: `model_registry_path` names the "
+            "directory of entry files and this names the weights those entries "
+            "point at, and one path answering for both would measure the disk "
+            "budget over the wrong tree. It has no default on purpose. A "
+            "default would put a model family wherever the process happened to "
+            "be started, which on the intended deployment is the volume holding "
+            "the operator's photographs, and it would do it silently. "
+            "`docs/model-storage.md` is the layout underneath this path, "
+            "written so a model can be found, backed up or deleted by hand."
+        ),
+    ),
+    Setting(
+        name="model_disk_budget_bytes",
+        kind=Kind.INTEGER,
+        unit="bytes of disk under the model store",
+        summary=(
+            "The most disk the model store may hold. A fetch that would put "
+            "the store over it is refused before it starts, with both numbers "
+            "named, because a download refused after four gigabytes have "
+            "landed has already spent what the ceiling was protecting. The "
+            "default is thirty-two gibibytes, and it is a choice rather than a "
+            "measurement: no model entry is in this tree yet, so no artefact "
+            "size has been read from one. It is set on the side that refuses "
+            "loudly, since the volume this competes for is usually the one "
+            "holding the photographs. Free space is checked separately and "
+            "afterwards: raising this number does not create any."
+        ),
+        default="34359738368",
     ),
     Setting(
         name="device_memory_budget_bytes",

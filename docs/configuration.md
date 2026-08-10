@@ -76,6 +76,24 @@ The directory of model entries, one file per model, that the registry is read fr
 - Default: none, and the service does not start without it
 - Environment: `RETUSCHE_MODEL_REGISTRY_PATH`
 
+### `model_store_path`
+
+Where model artefacts are kept. This is the tens of gigabytes, not the small declarations: `model_registry_path` names the directory of entry files and this names the weights those entries point at, and one path answering for both would measure the disk budget over the wrong tree. It has no default on purpose. A default would put a model family wherever the process happened to be started, which on the intended deployment is the volume holding the operator's photographs, and it would do it silently. `docs/model-storage.md` is the layout underneath this path, written so a model can be found, backed up or deleted by hand.
+
+- Kind: a filesystem path
+- Unit: a path to a directory, absolute or relative to the working directory
+- Default: none, and the service does not start without it
+- Environment: `RETUSCHE_MODEL_STORE_PATH`
+
+### `model_disk_budget_bytes`
+
+The most disk the model store may hold. A fetch that would put the store over it is refused before it starts, with both numbers named, because a download refused after four gigabytes have landed has already spent what the ceiling was protecting. The default is thirty-two gibibytes, and it is a choice rather than a measurement: no model entry is in this tree yet, so no artefact size has been read from one. It is set on the side that refuses loudly, since the volume this competes for is usually the one holding the photographs. Free space is checked separately and afterwards: raising this number does not create any.
+
+- Kind: a whole number
+- Unit: bytes of disk under the model store
+- Default: `34359738368`
+- Environment: `RETUSCHE_MODEL_DISK_BUDGET_BYTES`
+
 ### `device_memory_budget_bytes`
 
 The most device memory this project will hold at once, weights that stay resident included. It is a ceiling the operator sets and not an amount read off the card, because the card is usually shared with a photo library, a transcoder or a desktop session, and taking what looks free breaks the thing this service was meant to sit politely beside. A job whose estimate does not fit in what is left is refused before it reaches the device, with both numbers named. The default is four gibibytes and it is a choice rather than a measurement: nothing here has yet measured what an engine needs, so it is set on the side that refuses loudly rather than the side that quietly takes somebody else's memory.

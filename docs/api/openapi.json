@@ -1,0 +1,79 @@
+{
+  "components": {
+    "responses": {
+      "Refused": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Refusal"
+            }
+          }
+        },
+        "description": "The request was refused."
+      }
+    },
+    "schemas": {
+      "Refusal": {
+        "additionalProperties": false,
+        "description": "The body of every refusal. Branch on reason; show message; never parse message.",
+        "properties": {
+          "message": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "parameter": {
+            "description": "The input the refusal is about, or null where it is about none.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reason": {
+            "enum": [
+              "illegal_transition",
+              "internal",
+              "invalid_mask",
+              "model_not_available",
+              "over_budget",
+              "unknown_job",
+              "unsupported_request"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "message",
+          "parameter"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "license": {
+      "identifier": "AGPL-3.0-only",
+      "name": "AGPL-3.0-only"
+    },
+    "summary": "Self-hosted backend for generative photo editing.",
+    "title": "retusche",
+    "version": "1"
+  },
+  "openapi": "3.1.0",
+  "paths": {},
+  "servers": [
+    {
+      "description": "The versioned surface.",
+      "url": "/api/v1"
+    }
+  ],
+  "x-retusche-refusal-status": {
+    "illegal_transition": 409,
+    "internal": 500,
+    "invalid_mask": 422,
+    "model_not_available": 422,
+    "over_budget": 413,
+    "unknown_job": 404,
+    "unsupported_request": 422
+  }
+}

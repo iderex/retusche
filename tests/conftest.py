@@ -7,13 +7,19 @@ The rules themselves are in ``harness_rules``, with no pytest and no tree in
 them. What is here is the wiring: read the project file, read ``src/``, hand both
 to a rule, and turn what comes back into a refusal or into a line the run prints.
 
-Two rules, and both fail closed.
+Three rules, and all three fail closed.
 
 The first is a discovery rule. A test that imports a machine-learning runtime is
 not a unit test, and it is refused while the file is still bytes on disk, so
 nothing forbidden is imported on the way to the refusal.
 
-The second is a disclosure rule. Coverage measures the orchestration packages and
+The second reads the same file for the same import one scope further in. A test
+that defers the import into its own body is asking for a device, and it may,
+once it carries the hardware marker that keeps it out of the default run. Without
+the marker it is refused at collection, so the failure names the cause instead of
+arriving later as a driver error inside an assertion.
+
+The third is a disclosure rule. Coverage measures the orchestration packages and
 not the worker, so the run prints what it did not measure and why, and refuses to
 start when a package under ``src/`` is in neither list.
 
@@ -37,6 +43,8 @@ import pytest
 from harness_rules import (
     coverage_scope_lines,
     coverage_scope_problems,
+    deferred_forbidden_imports,
+    deferred_import_message,
     forbidden_import_message,
     module_level_forbidden_imports,
 )
@@ -61,6 +69,11 @@ def _forbidden_roots() -> frozenset[str]:
     config = _project_config()
     roots: list[str] = config["tool"]["retusche"]["import-boundary"]["forbidden-roots"]
     return frozenset(roots)
+
+
+def _hardware_marker() -> str:
+    marker: str = _project_config()["tool"]["retusche"]["hardware-harness"]["marker"]
+    return marker
 
 
 def _measured_packages() -> frozenset[str]:
@@ -142,15 +155,27 @@ def pytest_collect_file(file_path: Path, parent: pytest.Collector) -> None:
 
     Raised as a usage error rather than reported as a failing test. A failing
     test would have to be imported first, which is the thing being refused.
+
+    Both rules read the same bytes once. The module-level one is asked first
+    because its refusal is the wider one: a file failing both is told to move the
+    import out of the process, not to label it.
     """
     del parent  # The rule is about the file, not about where it sits.
     if file_path.suffix != ".py":
         return
-    offences = module_level_forbidden_imports(
-        file_path.read_bytes(), _forbidden_roots(), filename=str(file_path)
-    )
+    source = file_path.read_bytes()
+    roots = _forbidden_roots()
+    offences = module_level_forbidden_imports(source, roots, filename=str(file_path))
     if offences:
         raise pytest.UsageError(forbidden_import_message(str(file_path), offences))
+    marker = _hardware_marker()
+    deferred = deferred_forbidden_imports(
+        source, roots, marker, filename=str(file_path)
+    )
+    if deferred:
+        raise pytest.UsageError(
+            deferred_import_message(str(file_path), deferred, marker)
+        )
 
 
 def pytest_configure(config: pytest.Config) -> None:

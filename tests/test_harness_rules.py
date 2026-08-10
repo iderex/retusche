@@ -22,6 +22,8 @@ import pytest
 from harness_rules import (
     coverage_scope_lines,
     coverage_scope_problems,
+    deferred_forbidden_imports,
+    deferred_import_message,
     forbidden_import_message,
     import_boundary_message,
     import_boundary_offences,
@@ -111,9 +113,10 @@ def test_an_import_in_a_try_block_is_found() -> None:
 
 
 def test_an_import_inside_a_function_is_not_found() -> None:
-    """The boundary the rule draws, stated as a test rather than as a comment. A
-    test may reach for the runtime inside a body it never calls without weights
-    present; what is refused is a module that cannot be imported without one."""
+    """The boundary this rule draws, stated as a test rather than as a comment.
+    What it refuses is a module that cannot be imported without the runtime. The
+    same import one scope further in is where ``deferred_forbidden_imports``
+    starts, and the tests for it are at the foot of this file."""
     assert (
         module_level_forbidden_imports(
             _source("""
@@ -430,3 +433,355 @@ def test_the_message_draws_every_chain() -> None:
     assert "app -> app.jobs -> torch" in message
     assert "app.orphan -> diffusers" in message
     assert "2 import chain(s)" in message
+
+
+_MARKER = "hardware"
+
+
+def test_a_deferred_import_in_an_unmarked_test_is_found_with_its_line() -> None:
+    """The near miss this rule exists for, and it is the one somebody writes.
+
+    Written at the top of the file the import is refused by the rule above and
+    the refusal is visible. Written inside the body it looks like a smaller
+    decision, it is invisible to that rule, and it loads the runtime into the
+    process the moment the test runs. The two readings here are of one source.
+    """
+    inside = _source("""
+    def test_edit() -> None:
+        import torch
+
+        assert torch.cuda.is_available()
+    """)
+    assert module_level_forbidden_imports(inside, _ROOTS) == []
+    assert deferred_forbidden_imports(inside, _ROOTS, _MARKER) == [(2, "torch")]
+
+
+def test_a_module_level_import_is_left_to_the_other_rule() -> None:
+    """Two rules refusing one line would print two refusals naming two repairs,
+    and the wider one is the right one to act on."""
+    assert (
+        deferred_forbidden_imports(
+            _source("""
+            import torch
+
+
+            def test_edit() -> None:
+                assert torch
+            """),
+            _ROOTS,
+            _MARKER,
+        )
+        == []
+    )
+
+
+def test_a_marked_test_may_reach_for_the_runtime() -> None:
+    assert (
+        deferred_forbidden_imports(
+            _source("""
+            import pytest
+
+
+            @pytest.mark.hardware
+            def test_edit() -> None:
+                import torch
+
+                assert torch.cuda.is_available()
+            """),
+            _ROOTS,
+            _MARKER,
+        )
+        == []
+    )
+
+
+def test_the_called_form_of_the_marker_counts() -> None:
+    """The spelling somebody reaches for the moment they want to say why, and
+    reading only the bare attribute would refuse a correctly marked test."""
+    assert (
+        deferred_forbidden_imports(
+            _source("""
+            import pytest
+
+
+            @pytest.mark.hardware(reason="needs a driver")
+            def test_edit() -> None:
+                import torch
+
+                assert torch
+            """),
+            _ROOTS,
+            _MARKER,
+        )
+        == []
+    )
+
+
+def test_the_marker_counts_when_mark_was_imported_directly() -> None:
+    assert (
+        deferred_forbidden_imports(
+            _source("""
+            from pytest import mark
+
+
+            @mark.hardware
+            def test_edit() -> None:
+                import torch
+
+                assert torch
+            """),
+            _ROOTS,
+            _MARKER,
+        )
+        == []
+    )
+
+
+def test_a_different_marker_does_not_excuse_the_import() -> None:
+    """The one-character version of the mistake: a decorator is present, it is
+    the wrong one, and a rule looking for any mark at all would pass it."""
+    assert deferred_forbidden_imports(
+        _source("""
+        import pytest
+
+
+        @pytest.mark.slow
+        def test_edit() -> None:
+            import torch
+
+            assert torch
+        """),
+        _ROOTS,
+        _MARKER,
+    ) == [(6, "torch")]
+
+
+def test_a_marker_on_the_class_covers_its_methods() -> None:
+    assert (
+        deferred_forbidden_imports(
+            _source("""
+            import pytest
+
+
+            @pytest.mark.hardware
+            class TestOnADevice:
+                def test_edit(self) -> None:
+                    import torch
+
+                    assert torch
+            """),
+            _ROOTS,
+            _MARKER,
+        )
+        == []
+    )
+
+
+def test_an_unmarked_method_of_an_unmarked_class_is_found() -> None:
+    assert deferred_forbidden_imports(
+        _source("""
+        class TestOnADevice:
+            def test_edit(self) -> None:
+                import torch
+
+                assert torch
+        """),
+        _ROOTS,
+        _MARKER,
+    ) == [(3, "torch")]
+
+
+def test_a_module_level_pytestmark_covers_the_whole_file() -> None:
+    assert (
+        deferred_forbidden_imports(
+            _source("""
+            import pytest
+
+            pytestmark = pytest.mark.hardware
+
+
+            def test_edit() -> None:
+                import torch
+
+                assert torch
+            """),
+            _ROOTS,
+            _MARKER,
+        )
+        == []
+    )
+
+
+def test_a_module_level_pytestmark_list_covers_the_whole_file() -> None:
+    assert (
+        deferred_forbidden_imports(
+            _source("""
+            import pytest
+
+            pytestmark = [pytest.mark.slow, pytest.mark.hardware]
+
+
+            def test_edit() -> None:
+                import torch
+
+                assert torch
+            """),
+            _ROOTS,
+            _MARKER,
+        )
+        == []
+    )
+
+
+def test_a_module_level_pytestmark_of_something_else_covers_nothing() -> None:
+    assert deferred_forbidden_imports(
+        _source("""
+        import pytest
+
+        pytestmark = pytest.mark.slow
+
+
+        def test_edit() -> None:
+            import torch
+
+            assert torch
+        """),
+        _ROOTS,
+        _MARKER,
+    ) == [(7, "torch")]
+
+
+def test_a_helper_nested_inside_a_marked_test_is_covered() -> None:
+    """A deferred import written one function deeper is the same import. The
+    marker on the test it sits in is what makes it legal, so the walk carries the
+    mark inward rather than deciding per function."""
+    assert (
+        deferred_forbidden_imports(
+            _source("""
+            import pytest
+
+
+            @pytest.mark.hardware
+            def test_edit() -> None:
+                def load():
+                    import torch
+
+                    return torch
+
+                assert load()
+            """),
+            _ROOTS,
+            _MARKER,
+        )
+        == []
+    )
+
+
+def test_an_import_inside_a_lambda_body_is_found() -> None:
+    assert deferred_forbidden_imports(
+        _source("""
+        build = lambda: __import__("diffusers")
+
+
+        def outer():
+            inner = lambda: [f for f in ()]
+            import onnxruntime
+
+            return inner, onnxruntime
+        """),
+        _ROOTS,
+        _MARKER,
+    ) == [(6, "onnxruntime")]
+
+
+def test_a_from_import_and_an_alias_are_both_found() -> None:
+    assert deferred_forbidden_imports(
+        _source("""
+        def test_edit() -> None:
+            import torch as t
+            from onnxruntime import InferenceSession
+
+            assert t and InferenceSession
+        """),
+        _ROOTS,
+        _MARKER,
+    ) == [(2, "torch"), (3, "onnxruntime")]
+
+
+def test_a_relative_import_inside_a_body_is_not_found() -> None:
+    """Same reason as the rule above: a relative import cannot reach a top-level
+    runtime, so resolving it would be answering a question it never asked."""
+    assert (
+        deferred_forbidden_imports(
+            _source("""
+            def test_edit() -> None:
+                from . import torch
+
+                assert torch
+            """),
+            _ROOTS,
+            _MARKER,
+        )
+        == []
+    )
+
+
+def test_an_allowed_import_inside_a_body_is_not_found() -> None:
+    assert (
+        deferred_forbidden_imports(
+            _source("""
+            def test_edit() -> None:
+                import json
+
+                assert json
+            """),
+            _ROOTS,
+            _MARKER,
+        )
+        == []
+    )
+
+
+def test_a_module_whose_name_merely_starts_with_a_root_is_not_deferred() -> None:
+    assert (
+        deferred_forbidden_imports(
+            _source("""
+            def test_edit() -> None:
+                import torchless
+
+                assert torchless
+            """),
+            _ROOTS,
+            _MARKER,
+        )
+        == []
+    )
+
+
+def test_every_offence_in_one_file_is_reported_in_line_order() -> None:
+    assert deferred_forbidden_imports(
+        _source("""
+        def test_one() -> None:
+            import torch
+
+            assert torch
+
+
+        def test_two() -> None:
+            import diffusers
+
+            assert diffusers
+        """),
+        _ROOTS,
+        _MARKER,
+    ) == [(2, "torch"), (8, "diffusers")]
+
+
+def test_the_deferred_refusal_names_the_file_the_line_the_module_and_the_way_out() -> (
+    None
+):
+    """A refusal naming no way out is one somebody works around."""
+    message = deferred_import_message("tests/test_edit.py", [(12, "torch")], _MARKER)
+    assert "tests/test_edit.py" in message
+    assert "line 12: torch" in message
+    assert "@pytest.mark.hardware" in message

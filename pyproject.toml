@@ -157,6 +157,45 @@ retusche_contracts = ["retusche_contracts"]
 # [tool.coverage.run] source, so a new package cannot arrive without a decision.
 retusche_worker = "the engine worker, the one package permitted a machine-learning runtime. No unit test loads it, so a coverage number over it would describe code this suite deliberately never runs. Its own harness is the hardware one."
 
+[tool.retusche.output-discipline]
+# One module builds a log line and refuses one carrying a photograph, a prompt or
+# a path out of the operator's library. That refusal is worth what the number of
+# ways around it allows, so this is the list of ways around it that a reading of
+# the syntax can close.
+#
+# The package that holds the declaration is outside the rule, because it is the
+# thing everything else is required to go through.
+through = "retusche.logging.records"
+declared-in = "retusche.logging"
+
+# Judged packages. The worker is deliberately absent: the layer rules refuse it
+# an import of the orchestration layer, so it cannot reach the declaration, and a
+# rule refusing it a logger as well would leave it with no way to say anything at
+# all. What the worker says, and to whom, arrives with the supervisor in #17.
+judged-roots = ["retusche", "retusche_contracts"]
+
+# A logging framework, by module root. Only the standard library's is here,
+# because it is the only one reachable: no third-party logger is in the
+# dependency set, and one arriving is a lock change that passes a review. Adding
+# it here at that point is a data change and nothing else.
+refused-imports = ["logging"]
+
+# Writing to the process's own output without going through the declaration.
+#
+# `print` is not in this list and its absence is deliberate. ruff's T20 already
+# refuses it, and a second mechanism deciding one question means two places to
+# change and two verdicts to reconcile. What T20 matches is the name `print` and
+# the name `pprint`, so the line somebody writes after being refused once goes
+# straight past it, and that line is what these two entries are for.
+refused-calls = ["sys.stdout.write", "sys.stderr.write"]
+
+[tool.retusche.output-discipline.prevents]
+# What each invariant prevents, in the declaration rather than in the rule, so
+# the refusal a reader meets carries the reason and adding an invariant is an
+# entry here.
+imports-a-logger = "a second way to write a line, with no declared field set behind it, so a filename or a prompt reaches a log through a format string nobody reviewed"
+writes-directly = "a line that never passes the field check at all, written straight to the process's output where nothing reads it but the operator's log collector"
+
 [tool.retusche.hardware-harness]
 # The one word a test says when it needs a device. Written here rather than in
 # the three places that act on it, because those three have to agree: pytest

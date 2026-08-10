@@ -113,11 +113,15 @@ The operator's credentials, in any rendering. A value declared as a secret is ha
 
 ## What this page does not establish
 
-That every part of this service logs through the declaration above. Nothing in
-this tree logs at all yet: the module and its refusals exist, and the first log
-site arrives with the component that has something to say. A check that refuses
-a logging call made outside this module is issue #80, and until it lands, what
-stands behind the claim is review.
+That every part of this service logs through the declaration above. What is now
+refused, rather than reviewed, is a module under the orchestration packages
+importing a logging framework or writing to the process's own output: the
+declaration is `[tool.retusche.output-discipline]` in `pyproject.toml` and the
+suite applies it to every module outside this one. What that does not reach is
+written beside it in `tests/test_output_discipline.py`, and the largest of them
+is the engine worker, which runs in a process of its own and cannot import this
+module at all. Nothing in this tree logs yet in any case: the first log site
+arrives with the component that has something to say.
 
 That the lines are kept safely once they leave this process. A log written to a
 file an operator ships elsewhere is subject to whatever that destination does,

@@ -374,25 +374,33 @@ def test_a_source_this_module_will_not_open_is_refused(
         fetch_artefact(_entry(source), store)
 
 
-def test_https_is_accepted_as_far_as_opening_it(tmp_path: Path) -> None:
+def test_https_is_accepted_as_far_as_opening_it(
+    tmp_path: Path, server: _Server
+) -> None:
     """The scheme check passes and the transport is what fails, not the check.
 
-    The host is the loopback address and the port is one nothing listens on, so
-    the connection is refused by this machine without a name being resolved and
-    without a packet leaving it. A hostname under `.invalid` was the obvious
-    choice and is the wrong one: a resolver that answers for it turns this into
-    an outbound connection and a sixty-second wait.
+    Addressed at the fixture server, which speaks plain http, so the request is
+    answered by something that is listening and the handshake is what fails. That
+    is the whole point: a failure this late can only be reached by a fetch that
+    tried, which is what the parametrised case above cannot say. Nothing is
+    resolved and no packet leaves the machine.
 
-    What this establishes is that https is not refused before anything is
-    attempted, which the parametrised case above cannot say.
+    Two shapes were measured and dropped. A hostname under `.invalid` turns a
+    resolver that answers for it into an outbound connection and a minute of
+    waiting. `127.0.0.1:1` looks local and cheap, and its cost is decided by
+    whatever drops or refuses the packet: it cost two seconds per run here and
+    twenty-three on one run in six, which is a suite whose duration a firewall
+    rule chooses.
     """
+    server.routes["/weights"] = _serves(_ARTEFACT)
     store = _store(tmp_path)
-    entry = _entry("https://127.0.0.1:1/weights")
+    entry = _entry(_url(server, "/weights").replace("http://", "https://"))
 
     with pytest.raises(OSError):  # any transport failure will do
         fetch_artefact(entry, store)
 
     assert not store.incoming_path(entry).exists()
+    assert not store.artefact_path(entry).exists()
 
 
 def test_the_disk_refusal_happens_before_anything_is_opened(

@@ -71,6 +71,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "CHUNK_BYTES",
+    "OWNER_ONLY",
     "DigestMismatchError",
     "FetchError",
     "FetchInProgressError",
@@ -87,6 +88,24 @@ A megabyte, which is the bound on how far past the declared size a fetch can
 read before it refuses, and the granularity of the progress report. Both are
 this number, and that is why it is one number rather than two: a report finer
 than the read is a report repeating itself.
+"""
+
+OWNER_ONLY: Final = 0o600
+"""The mode a fetched file is created with, and the mode the artefact keeps.
+
+While it is being written the file holds bytes nothing has verified yet, and no
+other user on the host has any business reading them or, worse, writing them: a
+partial file another account can append to is a file whose digest this fetch
+would then compute over somebody else's bytes.
+
+The rename carries the mode onto the artefact, so this is the installed file's
+mode as well, and it is deliberate there too. The processes that open weights are
+this service's own and run as the user that fetched them. A model directory
+readable by every account on the machine is a default nobody chose, and the
+weights are large enough that a copy of one is not a small thing to take.
+
+Windows honours only the write bit of this number, so what the suite asserts is
+the mode this module asks for rather than what a filesystem made of it.
 """
 
 _LOOPBACK_HOSTS: Final = frozenset({"127.0.0.1", "::1", "localhost"})
@@ -270,7 +289,7 @@ def _create_exclusively(entry: ModelEntry, incoming: Path) -> BufferedWriter:
     lock is a second thing to leave behind.
     """
     try:
-        descriptor = os.open(incoming, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+        descriptor = os.open(incoming, os.O_CREAT | os.O_EXCL | os.O_WRONLY, OWNER_ONLY)
     except FileExistsError as error:
         raise FetchInProgressError(entry, incoming) from error
     return os.fdopen(descriptor, "wb")

@@ -28,6 +28,7 @@ No device, no display, no elevation, and no traffic that leaves the machine.
 from __future__ import annotations
 
 import hashlib
+import os
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -37,6 +38,7 @@ import pytest
 
 from retusche.models import fetch as fetch_module
 from retusche.models.fetch import (
+    OWNER_ONLY,
     DigestMismatchError,
     FetchInProgressError,
     Progress,
@@ -197,6 +199,35 @@ def test_a_failed_verification_leaves_nothing_behind(
     assert not store.artefact_path(entry).exists()
     assert not store.incoming_path(entry).exists()
     assert store.used_bytes() == 0
+
+
+def test_the_file_a_fetch_creates_grants_nothing_to_anybody_else(
+    tmp_path: Path, server: _Server, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The mode is asserted as the number this module asks for.
+
+    Not as the bits a filesystem ended up with, because Windows honours only the
+    write bit of a POSIX mode and this suite runs on both. What is worth holding
+    is the request: a partial file another account can append to is a file whose
+    digest this fetch would compute over somebody else's bytes, and the mode
+    survives the rename onto the artefact.
+    """
+    modes: list[int] = []
+    opener = os.open
+
+    def recording(path: object, flags: int, mode: int = 0o777) -> int:
+        modes.append(mode)
+        return opener(path, flags, mode)  # type: ignore[arg-type]  # os.open is overloaded on path
+
+    monkeypatch.setattr(fetch_module.os, "open", recording)
+    server.routes["/weights"] = _serves(_ARTEFACT)
+    store = _store(tmp_path)
+    entry = _entry(_url(server, "/weights"))
+
+    fetch_artefact(entry, store)
+
+    assert modes == [OWNER_ONLY]
+    assert not OWNER_ONLY & 0o077
 
 
 def test_a_mismatched_artefact_is_never_renamed_into_place(

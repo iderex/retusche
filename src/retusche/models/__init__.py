@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from retusche.models.fetch import (
     CHUNK_BYTES,
+    OWNER_ONLY,
     DigestMismatchError,
     FetchError,
     FetchInProgressError,
@@ -47,6 +48,7 @@ from retusche.models.storage import (
 __all__ = [
     "CHUNK_BYTES",
     "INCOMING_SUFFIX",
+    "OWNER_ONLY",
     "DigestMismatchError",
     "FetchError",
     "FetchInProgressError",

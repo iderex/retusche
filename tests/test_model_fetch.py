@@ -30,6 +30,7 @@ from __future__ import annotations
 import hashlib
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
@@ -49,7 +50,6 @@ from retusche_contracts.engine import Operation
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
-    from pathlib import Path
 
 _ARTEFACT = b"the weights, as far as this suite is concerned" * 4
 _DIGEST = "sha256:" + hashlib.sha256(_ARTEFACT).hexdigest()
@@ -197,6 +197,37 @@ def test_a_failed_verification_leaves_nothing_behind(
     assert not store.artefact_path(entry).exists()
     assert not store.incoming_path(entry).exists()
     assert store.used_bytes() == 0
+
+
+def test_a_mismatched_artefact_is_never_renamed_into_place(
+    tmp_path: Path, server: _Server, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The digest check is in front of the move rather than beside it.
+
+    Asserted on the move itself rather than on the directory afterwards, and the
+    case above is why. An implementation that renamed first and removed the
+    artefact once the digest disagreed leaves the same empty directory, so it
+    passes every other case in this file while the name a loader opens has held
+    unverified bytes for the length of one unlink. That rearrangement was run
+    against the rest of this file and all of it stayed green, which is what this
+    case is here for.
+    """
+    renames: list[tuple[Path, Path]] = []
+    moved = Path.replace
+
+    def recording(self: Path, target: Path) -> Path:
+        renames.append((self, target))
+        return moved(self, target)
+
+    monkeypatch.setattr(Path, "replace", recording)
+    server.routes["/weights"] = _serves(_ARTEFACT)
+    store = _store(tmp_path)
+    entry = _entry(_url(server, "/weights"), digest=_OTHER_DIGEST)
+
+    with pytest.raises(DigestMismatchError):
+        fetch_artefact(entry, store)
+
+    assert renames == []
 
 
 def test_a_transfer_cut_short_is_refused_and_removed(

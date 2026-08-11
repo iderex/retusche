@@ -211,11 +211,16 @@ def test_the_file_a_fetch_creates_grants_nothing_to_anybody_else(
     is the request: a partial file another account can append to is a file whose
     digest this fetch would compute over somebody else's bytes, and the mode
     survives the rename onto the artefact.
+
+    The recorder takes the mode without a default, so this file holds no
+    permissive number of its own. `os.open` defaults to `0o777`, and writing that
+    out as a fallback nothing reaches was enough for code scanning to refuse the
+    tree a second time, in the test asserting the first refusal's repair.
     """
     modes: list[int] = []
     opener = os.open
 
-    def recording(path: object, flags: int, mode: int = 0o777) -> int:
+    def recording(path: object, flags: int, mode: int) -> int:
         modes.append(mode)
         return opener(path, flags, mode)  # type: ignore[arg-type]  # os.open is overloaded on path
 

@@ -135,9 +135,30 @@ connection to any library.
 
 No telemetry, no update check, no crash reporting, no model usage reporting.
 Nothing in the plan asks for any of them and no issue on the tracker proposes
-one. That is a statement about the plan and not a property of the code: no
-check in this repository refuses an outbound connection, so nothing would stop
-a fourth one being added except a reader of the diff.
+one.
+
+Something refuses a fourth one now, which is a change from what this section
+said before. Outside the one module that fetches weights, a module under
+`retusche` or `retusche_contracts` may neither import a way of opening a
+connection nor call one, and the suite is red if it does. The permitted module
+is `[tool.retusche.network-reach]` in `pyproject.toml`, and adding a second one
+is an entry there rather than an import somebody writes:
+
+    git grep -n '^through = ' -- pyproject.toml
+
+Read what that does not cover before treating it as the whole claim. It is a
+reading of the syntax, so a connection opened through a name it cannot resolve
+is invisible to it, and it deliberately says nothing about `subprocess` or
+`os.system`, because launching a separate process is how the worker is started.
+The worker itself is outside the judged packages: what it may reach arrives with
+the supervisor in #17 and is not decided here. A third-party package that
+contacts a host on its own account is a property of that package, and the
+runtime dependency set is empty today rather than examined. And nothing here
+watches the wire: this refuses the code that would open a connection, not the
+connection.
+
+The bounds are in `tests/test_network_reach.py` beside the walk, which is where
+they stay accurate.
 
 ## Biometric identification and face data
 

@@ -196,6 +196,42 @@ refused-calls = ["sys.stdout.write", "sys.stderr.write"]
 imports-a-logger = "a second way to write a line, with no declared field set behind it, so a filename or a prompt reaches a log through a format string nobody reviewed"
 writes-directly = "a line that never passes the field check at all, written straight to the process's output where nothing reads it but the operator's log collector"
 
+[tool.retusche.documentation-references]
+# A document here argues by pointing at a file, and a file that moves takes
+# every pointer at it out of date with nothing noticing. What is judged, and how
+# narrowly, is data rather than a pattern inside the rule, because the narrowness
+# is the part somebody will want to argue with.
+
+# What makes a backticked token a reference rather than prose: a separator, and
+# an ending that is one of these or a separator itself. Both halves are required.
+# `unicode-guard.yml` is a bare filename and `i/crlf` is a column of
+# `git ls-files --eol` output, and each of them is left alone by one half of the
+# pair. Widening either half refuses the documents that explain those commands.
+path-suffixes = [".md", ".py", ".yml", ".yaml", ".toml", ".json", ".lock", ".txt"]
+
+# Directories beginning with a dot that hold tracked files. The walk that builds
+# the set of paths a reference resolves against skips a dot directory, because
+# every cache and every build output this project produces is one; this is the
+# list of the ones that are not. `.venv/` is deliberately absent, which is why
+# the reference to it below is an exemption rather than a resolution.
+resolved-dot-directories = [".github"]
+
+# Directories holding nothing a document may point at, by name rather than by
+# shape, since none of them begins with a dot.
+skipped-directories = ["build", "dist", "__pycache__"]
+
+[tool.retusche.documentation-references.exempt]
+# A reference to a path that is deliberately not there, with the reason it is
+# written that way. An entry is refused once the path arrives, and refused when
+# no document makes the reference any more, so this table cannot quietly become
+# the place a stale pointer goes to be forgotten.
+".venv/" = "created by `uv sync` and never committed. The guide names it to say where the interpreter lands, which is a fact about a contributor's machine rather than a pointer into this tree."
+"docs/decisions/NNNN-short-name.md" = "the naming rule for a decision record, with the placeholder standing where the number goes. No file is meant to carry this name."
+"docs/release/walked/<name>.md" = "the same shape for a walk record, with the angle brackets standing where the name goes."
+"docs/operating/" = "named by a walked release record as a directory that does not exist. The record's subject is that the operator guide is #61's and absent, so the reference is to the absence."
+"tests/hardware/" = "named by a walked release record as absent. #85 delivers it, and this entry goes red on the day it does."
+"tests/integration/" = "named by a walked release record as absent. #59 delivers it, and this entry goes red on the day it does."
+
 [tool.retusche.hardware-harness]
 # The one word a test says when it needs a device. Written here rather than in
 # the three places that act on it, because those three have to agree: pytest

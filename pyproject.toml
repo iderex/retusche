@@ -196,6 +196,61 @@ refused-calls = ["sys.stdout.write", "sys.stderr.write"]
 imports-a-logger = "a second way to write a line, with no declared field set behind it, so a filename or a prompt reaches a log through a format string nobody reviewed"
 writes-directly = "a line that never passes the field check at all, written straight to the process's output where nothing reads it but the operator's log collector"
 
+[tool.retusche.network-reach]
+# The pictures stay on the operator's machine, and that is the sentence this
+# whole project is built to keep. Until this table landed it was carried by the
+# fact that nothing had reached for a socket yet, which is not a property: a
+# component that acquired an outbound call would leave every route as green as
+# one that did not.
+#
+# So one module may reach a host and no other may. The module is the download,
+# because weights come from somebody else's server and there is no way around
+# that; every other outbound connection this project could grow is a decision,
+# and this table is where that decision has to be written before it compiles.
+through = "retusche.models.fetch"
+
+# Judged packages, the same two the output discipline judges and for the same
+# reason: the worker is a separate process with its own dependency set, and what
+# it may reach arrives with the supervisor in #17.
+judged-roots = ["retusche", "retusche_contracts"]
+
+# Ways of opening a connection, matched as a dotted prefix rather than as a root.
+# `urllib.request` opens one and `urllib.parse` splits a string, both are used
+# here, and a root match would refuse the second for what the first does. The
+# list is standard library only because the runtime dependency set is empty; a
+# client arriving is a lock change that passes a review, and adding it here at
+# that point is a data change and nothing else.
+refused-imports = [
+    "socket",
+    "ssl",
+    "http.client",
+    "urllib.request",
+    "ftplib",
+    "smtplib",
+    "imaplib",
+    "poplib",
+    "telnetlib",
+    "xmlrpc.client",
+    "webbrowser",
+]
+
+# Opening one through a name the import arm did not see, matched on the dotted
+# name as written.
+refused-calls = [
+    "socket.socket",
+    "socket.create_connection",
+    "urllib.request.urlopen",
+    "http.client.HTTPConnection",
+    "http.client.HTTPSConnection",
+]
+
+[tool.retusche.network-reach.prevents]
+# What each invariant prevents, in the declaration rather than in the rule, so
+# the refusal a reader meets carries the reason and adding an invariant is an
+# entry here.
+imports-a-way-out = "a second route off this machine, in a component whose whole promise is that there is only one, so a photograph acquires somewhere to go without anybody deciding that it may"
+opens-a-connection = "a host reached from a module that declares no reason to reach one, which is the shape a telemetry call, an update check or a crash report arrives in"
+
 [tool.retusche.documentation-references]
 # A document here argues by pointing at a file, and a file that moves takes
 # every pointer at it out of date with nothing noticing. What is judged, and how

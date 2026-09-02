@@ -1,0 +1,67 @@
+# Resolve the external links the documentation names, on a schedule.
+#
+# The other half of the reference rule that runs in the suite. That one refuses a
+# pointer at a path this tree does not hold, and it can decide that from the
+# checkout alone. A pointer at somebody else's server cannot be decided that way,
+# so this job reaches the network - and that is exactly why it is not on the
+# pull-request path. A link check there would refuse a merge for an outage
+# somewhere else, and the change it refuses has nothing to do with the link.
+#
+# So the schedule is the point of this file rather than a convenience: a dead
+# link becomes a message about a document instead of a gate in front of unrelated
+# work. Nothing here is a merge condition and nothing here should become one.
+#
+# Hardened the same way as every other workflow in this tree: the action is pinned
+# by commit with the version beside it, checkout does not persist the token, the
+# top level grants nothing and the job grants only what its checkout needs.
+name: External links
+
+on:
+  # Weekly. A link rots on nobody's schedule, and asking more often asks more of
+  # other people's servers for the same answer. Not on Monday, which is when the
+  # Scorecard audit runs.
+  schedule:
+    - cron: "13 5 * * 2"
+  # So the answer can be had now rather than on Tuesday, which is what somebody
+  # editing a document wants.
+  workflow_dispatch:
+
+# Nothing at the top level. The one job declares what it needs.
+permissions: {}
+
+# A newer run on the same ref supersedes an in-flight one. This publishes
+# nothing, so cancelling a superseded run loses nothing.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  external-links:
+    runs-on: ubuntu-latest
+    # Longer than the other jobs because this one waits on other people's
+    # servers. Every attempt carries its own timeout inside the script, so this
+    # bound is against a run that stalls rather than against a slow host.
+    timeout-minutes: 15
+    permissions:
+      contents: read # checkout only
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # No step pushes, so do not persist the token.
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
+      - name: Resolve every external link
+        # --no-project, and no `uv sync --locked` above it, because this script
+        # imports the standard library and nothing else. Syncing would install
+        # the formatter, the type checker and the test runner so that none of
+        # them is used, and it would make a link check fail on a resolution
+        # problem that has nothing to do with a link.
+        #
+        # The interpreter is named rather than left to the runner's default, so
+        # the version this runs under is the one `requires-python` pins and not
+        # whatever the image ships this month.
+        run: uv run --no-project --python 3.14 python .github/scripts/external_links.py

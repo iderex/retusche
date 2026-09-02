@@ -287,6 +287,32 @@ skipped-directories = ["build", "dist", "__pycache__"]
 "tests/hardware/" = "named by a walked release record as absent. #85 delivers it, and this entry goes red on the day it does."
 "tests/integration/" = "named by a walked release record as absent. #59 delivers it, and this entry goes red on the day it does."
 
+[tool.retusche.external-links]
+# The other half of the reference rule above, and the half no route a merge takes
+# may run: deciding whether somebody else's server answers means reaching the
+# network. `.github/scripts/external_links.py` does it on a schedule instead, and
+# reads the walk above from where that rule reads it so the two cannot come to
+# judge different sets of documents.
+#
+# Hosts that never resolve, and are not meant to. RFC 2606 and RFC 6761 reserve
+# these for exactly the use `models/registry/README.md` puts one to: an example
+# entry whose `source` has to look like a real download and must not be one. A
+# name here is not an exemption for a link that broke; it is a name the standards
+# guarantee will never answer, so asking is the mistake rather than the failure.
+#
+# Bare names. The match is the host itself or any name beneath it, so `invalid`
+# covers `example.invalid` and `example.com` covers only that domain and its
+# subdomains, which is what those two documents mean.
+reserved-hosts = [
+    "invalid",
+    "example",
+    "test",
+    "localhost",
+    "example.com",
+    "example.net",
+    "example.org",
+]
+
 [tool.retusche.hardware-harness]
 # The one word a test says when it needs a device. Written here rather than in
 # the three places that act on it, because those three have to agree: pytest

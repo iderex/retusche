@@ -296,6 +296,21 @@ not see.
 The rest read the pull request itself, the workflow files or the advisory
 database, and have no local form.
 
+`external-links` is named here and is not among them, because it never runs on a
+pull request. It resolves the external links the documentation names, on a
+weekly schedule and on demand, and it is deliberately off the change path: a
+link check there would refuse a merge for somebody else's outage. So it is not a
+name a ruleset could require, and nothing in `docs/quality-parity.md` carries it
+either, since that file is about what a pull-request head publishes. Reproduce
+it exactly with
+
+    python .github/scripts/external_links.py
+
+which needs the interpreter and nothing installed. It prints every URL it found,
+which of them it did not ask and why, and its own docstring says what a green
+run does not establish - a page that answers is not a page that still says what
+the document claims about it.
+
 ## How a change is made
 
 A change starts from an issue. The issue says what is wrong, what the evidence
